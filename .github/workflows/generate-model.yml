@@ -102,10 +102,3 @@ jobs:
           echo "📊 Monitor progress:"
           echo "   CloudWatch: https://console.aws.amazon.com/cloudwatch"
           echo "   View model: https://d2j2tqi3nk8zjp.cloudfront.net/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}"
-EOF
-
-echo -e "${GREEN}✅ Repository structure created${NC}"
-echo ""
-
-# Configure GitHub secrets
-echo -e "${BLUE}🔐 Configuring GitHub secrets${NC}"
