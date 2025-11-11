@@ -1,0 +1,28 @@
+# FreeCAD
+*.FCStd
+*.FCStd1
+*.FCBak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# STL files (generated, don't commit)
+*.stl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log

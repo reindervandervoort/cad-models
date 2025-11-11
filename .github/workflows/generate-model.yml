@@ -1,0 +1,111 @@
+name: Generate CAD Model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'models/**/*.py'
+  workflow_dispatch:
+    inputs:
+      model_name:
+        description: 'Model to generate (folder name under models/)'
+        required: true
+        default: 'demo'
+      version:
+        description: 'Version number (semantic versioning)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  trigger-generation:
+    name: Trigger Fargate Task
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine model and version
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "model_name=${{ github.event.inputs.model_name }}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "change_desc=Manual trigger" >> $GITHUB_OUTPUT
+          else
+            # Extract model from changed files
+            CHANGED_FILE=$(git diff --name-only HEAD~1 HEAD | grep 'models/.*/.*\.py' | head -1)
+            if [ -n "$CHANGED_FILE" ]; then
+              MODEL_NAME=$(echo "$CHANGED_FILE" | cut -d'/' -f2)
+              echo "model_name=$MODEL_NAME" >> $GITHUB_OUTPUT
+            else
+              echo "model_name=demo" >> $GITHUB_OUTPUT
+            fi
+            echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "change_desc=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Run ECS Fargate Task
+        id: run-task
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+            --task-definition ${{ secrets.ECS_TASK_DEFINITION }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
+            --overrides "{
+              \"containerOverrides\": [{
+                \"name\": \"freecad\",
+                \"environment\": [
+                  {\"name\": \"MODEL_NAME\", \"value\": \"${{ steps.vars.outputs.model_name }}\"},
+                  {\"name\": \"VERSION\", \"value\": \"${{ steps.vars.outputs.version }}\"},
+                  {\"name\": \"S3_BUCKET\", \"value\": \"${{ secrets.S3_BUCKET }}\"},
+                  {\"name\": \"GITHUB_REPO_URL\", \"value\": \"${{ github.server_url }}/${{ github.repository }}.git\"},
+                  {\"name\": \"COMMIT_SHA\", \"value\": \"${{ github.sha }}\"},
+                  {\"name\": \"CHANGE_DESCRIPTION\", \"value\": \"${{ steps.vars.outputs.change_desc }}\"}
+                ]
+              }]
+            }" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+          echo "✓ Task ARN: $TASK_ARN"
+
+      - name: Output summary
+        run: |
+          echo "## Model Generation Triggered 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Model**: \`${{ steps.vars.outputs.model_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: \`${{ steps.vars.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Task ARN**: \`${{ steps.run-task.outputs.task_arn }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check [CloudWatch Logs](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Fecs$252Fcad-dev-freecad)" >> $GITHUB_STEP_SUMMARY
+          echo "2. View model at: https://d2j2tqi3nk8zjp.cloudfront.net/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "3. Check status: \`aws s3 cp s3://${{ secrets.S3_BUCKET }}/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}/status.json -\`" >> $GITHUB_STEP_SUMMARY
+
+          echo ""
+          echo "✓ Model generation triggered successfully!"
+          echo "✓ Model: ${{ steps.vars.outputs.model_name }}"
+          echo "✓ Version: ${{ steps.vars.outputs.version }}"
+          echo "✓ Task ARN: ${{ steps.run-task.outputs.task_arn }}"
+          echo ""
+          echo "📊 Monitor progress:"
+          echo "   CloudWatch: https://console.aws.amazon.com/cloudwatch"
+          echo "   View model: https://d2j2tqi3nk8zjp.cloudfront.net/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}"
+EOF
+
+echo -e "${GREEN}✅ Repository structure created${NC}"
+echo ""
+
+# Configure GitHub secrets
+echo -e "${BLUE}🔐 Configuring GitHub secrets${NC}"
