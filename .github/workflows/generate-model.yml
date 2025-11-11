@@ -62,7 +62,7 @@ jobs:
             --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
             --overrides "{
               \"containerOverrides\": [{
-                \"name\": \"freecad\",
+                \"name\": \"freecad-container\",
                 \"environment\": [
                   {\"name\": \"MODEL_NAME\", \"value\": \"${{ steps.vars.outputs.model_name }}\"},
                   {\"name\": \"VERSION\", \"value\": \"${{ steps.vars.outputs.version }}\"},
