@@ -32,6 +32,13 @@ def generate_model():
     doc.recompute()
     print("✓ Document recomputed")
 
+    # Save document to disk for STL export
+    import os
+    os.makedirs("/tmp/output", exist_ok=True)
+    output_file = "/tmp/output/demo.FCStd"
+    doc.saveAs(output_file)
+    print(f"✓ Document saved to {output_file}")
+
     print(f"✓ Demo cube model generated successfully with {len(doc.Objects)} object(s)")
     return doc
 
