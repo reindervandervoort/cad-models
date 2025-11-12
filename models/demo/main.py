@@ -1,45 +1,37 @@
 #!/usr/bin/env python3
 """
 Simple Demo Model - Creates a basic cube
-Based on the bolt_pattern example structure
+Backend provides 'doc' variable - we add objects to it
 """
 
 import FreeCAD
 import Part
 
+# Backend provides 'doc' variable via exec()
+# Don't create a new document - use the one provided!
 
-def generate_model():
-    """
-    Generate a simple cube model that exports correctly to STL.
-    This follows the pattern used in the backend examples.
-    """
-    print("Starting demo model generation...")
+print("Starting demo model generation...")
+print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for standalone'}")
 
-    # Create new document
+# If running standalone (not from backend), create doc
+if 'doc' not in dir():
     doc = FreeCAD.newDocument("Demo")
-    print("✓ Document created")
+    print("✓ Created new document (standalone mode)")
+else:
+    print("✓ Using provided document (backend mode)")
 
-    # Create a cube (100x100x100 mm)
-    cube_shape = Part.makeBox(100, 100, 100)
-    print("✓ Cube shape created")
+# Create a cube (100x100x100 mm)
+cube_shape = Part.makeBox(100, 100, 100)
+print("✓ Cube shape created")
 
-    # Add cube to document as a Part::Feature
-    cube_obj = doc.addObject("Part::Feature", "DemoCube")
-    cube_obj.Shape = cube_shape
-    print("✓ Cube object added to document")
+# Add cube to the document
+cube_obj = doc.addObject("Part::Feature", "DemoCube")
+cube_obj.Shape = cube_shape
+print("✓ Cube object added to document")
 
-    # Recompute to ensure everything is updated
-    doc.recompute()
-    print("✓ Document recomputed")
+# Recompute to ensure everything is updated
+doc.recompute()
+print("✓ Document recomputed")
 
-    print(f"✓ Demo model generated successfully with {len(doc.Objects)} object(s)")
-
-    # Return the document for STL export
-    return doc
-
-
-if __name__ == "__main__":
-    # When run by the backend, this generates the model
-    doc = generate_model()
-    print("SUCCESS: Model generation complete")
-    # Don't call sys.exit() - let the backend handle STL export
+print(f"✓ Demo model completed with {len(doc.Objects)} object(s)")
+print("SUCCESS: Model generation complete")
