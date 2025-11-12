@@ -1,49 +1,45 @@
 #!/usr/bin/env python3
 """
-Demo FreeCAD Model - Simple Cube
-Demonstrates the basic structure of a FreeCAD generation script
+Simple Demo Model - Creates a basic cube
+Based on the bolt_pattern example structure
 """
 
 import FreeCAD
 import Part
-import sys
+
 
 def generate_model():
     """
-    Generate a simple cube with configurable size.
-    This is the entry point called by the backend.
+    Generate a simple cube model that exports correctly to STL.
+    This follows the pattern used in the backend examples.
     """
     print("Starting demo model generation...")
 
-    # Create new FreeCAD document
+    # Create new document
     doc = FreeCAD.newDocument("Demo")
     print("✓ Document created")
 
-    # Create a simple cube (100x100x100 mm)
-    cube = Part.makeBox(100, 100, 100)
+    # Create a cube (100x100x100 mm)
+    cube_shape = Part.makeBox(100, 100, 100)
     print("✓ Cube shape created")
 
-    # Add to document
-    obj = doc.addObject("Part::Feature", "Cube")
-    obj.Shape = cube
-    print("✓ Cube added to document")
+    # Add cube to document as a Part::Feature
+    cube_obj = doc.addObject("Part::Feature", "DemoCube")
+    cube_obj.Shape = cube_shape
+    print("✓ Cube object added to document")
 
-    # Recompute
+    # Recompute to ensure everything is updated
     doc.recompute()
     print("✓ Document recomputed")
 
-    # Save document to disk for STL export
-    import os
-    os.makedirs("/tmp/output", exist_ok=True)
-    output_file = "/tmp/output/demo.FCStd"
-    doc.saveAs(output_file)
-    print(f"✓ Document saved to {output_file}")
+    print(f"✓ Demo model generated successfully with {len(doc.Objects)} object(s)")
 
-    print(f"✓ Demo cube model generated successfully with {len(doc.Objects)} object(s)")
+    # Return the document for STL export
     return doc
 
+
 if __name__ == "__main__":
-    # When run standalone, generate and display result
+    # When run by the backend, this generates the model
     doc = generate_model()
     print("SUCCESS: Model generation complete")
-    # Note: Don't call sys.exit() as it prevents backend from exporting STL
+    # Don't call sys.exit() - let the backend handle STL export
