@@ -58,12 +58,7 @@ def generate_model():
     return doc
 
 if __name__ == "__main__":
-    try:
-        doc = generate_model()
-        print("SUCCESS: Model generation complete")
-        sys.exit(0)
-    except Exception as e:
-        print(f"ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    # When run standalone, generate and display result
+    doc = generate_model()
+    print("SUCCESS: Model generation complete")
+    # Note: Don't call sys.exit() as it prevents backend from exporting STL
