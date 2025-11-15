@@ -2,63 +2,55 @@
 """
 Parametric Box Model
 A hollow box with configurable dimensions and wall thickness
+Backend provides 'doc' variable - we add objects to it
 """
 
 import FreeCAD
 import Part
-import sys
 
-def generate_model():
-    """
-    Generate a parametric hollow box.
+print("Starting parametric box generation...")
+print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for standalone'}")
 
-    Parameters can be modified to create different box sizes.
-    """
-    print("Starting parametric box generation...")
-
-    # Parameters (can be customized)
-    length = 150  # mm
-    width = 100   # mm
-    height = 50   # mm
-    wall = 3      # mm wall thickness
-
-    print(f"Parameters: {length}x{width}x{height}mm, wall={wall}mm")
-
-    # Create new FreeCAD document
+# If running standalone (not from backend), create doc
+if 'doc' not in dir():
     doc = FreeCAD.newDocument("ParametricBox")
-    print("✓ Document created")
+    print("✓ Created new document (standalone mode)")
+else:
+    print("✓ Using provided document (backend mode)")
 
-    # Create outer box
-    outer = Part.makeBox(length, width, height)
-    print("✓ Outer box created")
+# Parameters (can be customized)
+length = 150  # mm
+width = 100   # mm
+height = 50   # mm
+wall = 3      # mm wall thickness
 
-    # Create inner cavity
-    inner = Part.makeBox(
-        length - 2*wall,
-        width - 2*wall,
-        height - wall,
-        FreeCAD.Vector(wall, wall, wall)
-    )
-    print("✓ Inner cavity created")
+print(f"Parameters: {length}x{width}x{height}mm, wall={wall}mm")
 
-    # Subtract inner from outer to create hollow box
-    hollow_box = outer.cut(inner)
-    print("✓ Hollow box created")
+# Create outer box
+outer = Part.makeBox(length, width, height)
+print("✓ Outer box created")
 
-    # Add to document
-    obj = doc.addObject("Part::Feature", "HollowBox")
-    obj.Shape = hollow_box
-    print("✓ Box added to document")
+# Create inner cavity
+inner = Part.makeBox(
+    length - 2*wall,
+    width - 2*wall,
+    height - wall,
+    FreeCAD.Vector(wall, wall, wall)
+)
+print("✓ Inner cavity created")
 
-    # Recompute
-    doc.recompute()
-    print("✓ Document recomputed")
+# Subtract inner from outer to create hollow box
+hollow_box = outer.cut(inner)
+print("✓ Hollow box created")
 
-    print(f"✓ Parametric box generated successfully with {len(doc.Objects)} object(s)")
-    return doc
+# Add to document
+obj = doc.addObject("Part::Feature", "HollowBox")
+obj.Shape = hollow_box
+print("✓ Box added to document")
 
-if __name__ == "__main__":
-    # When run standalone, generate and display result
-    doc = generate_model()
-    print("SUCCESS: Model generation complete")
-    # Note: Don't call sys.exit() as it prevents backend from exporting STL
+# Recompute
+doc.recompute()
+print("✓ Document recomputed")
+
+print(f"✓ Parametric box generated successfully with {len(doc.Objects)} object(s)")
+print("SUCCESS: Model generation complete")
