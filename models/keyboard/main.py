@@ -34,26 +34,29 @@ keyCount = params['keyCount']  # 9
 
 print(f"Parameters: u={u}mm, keyHeight={keyHeight}mm, keySpacing={keySpacing}mm, keyCount={keyCount}")
 
-# Create a single key box
-def create_key(position_y):
-    """Create a single key centered in x, at given y position, flush with z=0 plane"""
-    # Center in x direction means x starts at -u/2
-    box = Part.makeBox(u, u, keyHeight, FreeCAD.Vector(-u/2, position_y, 0))
-    return box
+# Create ONE keycap shape at origin (centered in X, flush with Z=0)
+# This single shape will be instanced 9 times with different Placements
+keycap_shape = Part.makeBox(u, u, keyHeight, FreeCAD.Vector(-u/2, 0, 0))
+print(f"✓ Created base keycap shape: {u}mm × {u}mm × {keyHeight}mm")
 
-# Create all keys in a row along y axis
-print(f"Creating {keyCount} keys...")
+# Add the same shape to document 9 times with different Placements
+# This enables GPU instancing because all objects have identical geometry
+print(f"Creating {keyCount} keycap instances...")
 for i in range(keyCount):
-    # Calculate y position: spacing between keys
+    # Calculate Y position for this instance
     y_pos = i * (u + keySpacing)
 
-    # Create key
-    key_shape = create_key(y_pos)
+    # Add object with the SAME shape
+    obj = doc.addObject("Part::Feature", "Keycap")
+    obj.Shape = keycap_shape
 
-    # Add to document
-    obj = doc.addObject("Part::Feature", f"Key_{i+1}")
-    obj.Shape = key_shape
-    print(f"✓ Key {i+1} created at y={y_pos}mm")
+    # Position it using Placement (not baked into geometry)
+    obj.Placement = FreeCAD.Placement(
+        FreeCAD.Vector(0, y_pos, 0),  # Position
+        FreeCAD.Rotation(0, 0, 0)      # Rotation (none)
+    )
+
+    print(f"✓ Keycap instance {i+1} placed at y={y_pos}mm")
 
 # Recompute
 doc.recompute()
