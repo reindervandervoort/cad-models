@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need 2 commits to compare HEAD~1 and HEAD
 
       - name: Determine model and version
         id: vars
@@ -42,7 +44,12 @@ jobs:
               echo "model_name=demo" >> $GITHUB_OUTPUT
             fi
             echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "change_desc=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+            # Use heredoc for multiline commit message
+            {
+              echo "change_desc<<EOF"
+              echo "${{ github.event.head_commit.message }}"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
           fi
 
       - name: Configure AWS credentials
