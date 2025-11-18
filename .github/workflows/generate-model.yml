@@ -44,12 +44,10 @@ jobs:
               echo "model_name=demo" >> $GITHUB_OUTPUT
             fi
             echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-            # Use heredoc for multiline commit message
-            {
-              echo "change_desc<<EOF"
-              echo "${{ github.event.head_commit.message }}"
-              echo "EOF"
-            } >> $GITHUB_OUTPUT
+            # Use only first line of commit message for JSON compatibility
+            # Full message with newlines breaks AWS ECS --overrides JSON
+            COMMIT_SUBJECT=$(echo "${{ github.event.head_commit.message }}" | head -1)
+            echo "change_desc=$COMMIT_SUBJECT" >> $GITHUB_OUTPUT
           fi
 
       - name: Configure AWS credentials
