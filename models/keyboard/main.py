@@ -2,6 +2,7 @@
 """
 Keyboard Model
 Creates a row of keycaps and switches from STL files
+Uses kailh_choc_low_profile_keycap.stl and kailhlowprofilev102.stl
 Backend provides 'doc' variable - we add objects to it
 """
 
