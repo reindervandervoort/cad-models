@@ -12,7 +12,7 @@ import Mesh
 import json
 import os
 
-print("Starting keyboard generation...")
+print("Starting keyboard generation with STL files...")
 print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for standalone'}")
 
 # If running standalone (not from backend), create doc
