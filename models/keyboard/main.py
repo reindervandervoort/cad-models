@@ -99,13 +99,13 @@ keycap_y_offset = -keycap_y_center  # Cancel out native Y position
 keycap_z_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 keycap_z_offset = -keycap_z_height / 2  # After Z centering, move down by half height
 
-# Switch offsets: center X/Y, put top at Z=-25
+# Switch offsets: center X/Y, put top at Z=0 (same as keycap - overlapping)
 switch_x_center = (switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_y_center = (switch_bbox.YMin + switch_bbox.YMax) / 2
 switch_x_offset = -switch_x_center  # Cancel out native X position (should be ~0)
 switch_y_offset = -switch_y_center  # Cancel out native Y position (should be ~0)
 switch_z_height = switch_bbox.ZMax - switch_bbox.ZMin
-switch_z_offset = -25 - switch_z_height / 2  # After Z centering, top at Z=-25
+switch_z_offset = -switch_z_height / 2  # After Z centering, top at Z=0 (overlapping with keycap)
 
 print(f"Keycap center: ({keycap_x_center:.2f}, {keycap_y_center:.2f}), Z height: {keycap_z_height:.2f}")
 print(f"Keycap offsets: X={keycap_x_offset:.2f}, Y={keycap_y_offset:.2f}, Z={keycap_z_offset:.2f}")
