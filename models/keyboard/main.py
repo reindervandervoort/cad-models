@@ -131,6 +131,42 @@ for i in range(keyCount):
     print(f"✓ Keycap at ({keycap_x_offset:.1f}, {keycap_y_offset:.1f}, {keycap_z_offset + z_pos:.1f})")
     print(f"✓ Switch at ({switch_x_offset:.1f}, {switch_y_offset:.1f}, {switch_z_offset + z_pos:.1f})")
 
+# Add axis indicators for debugging coordinate system
+# X axis: Red box extending in +X direction
+# Y axis: Green box extending in +Y direction (should be UP in Three.js)
+# Z axis: Blue box extending in +Z direction
+axis_length = 50
+axis_thickness = 2
+
+# X axis indicator (red) - horizontal
+x_axis = Part.makeBox(axis_length, axis_thickness, axis_thickness)
+x_axis_obj = doc.addObject("Part::Feature", "Axis_X_Red")
+x_axis_obj.Shape = x_axis
+x_axis_obj.Placement = FreeCAD.Placement(
+    FreeCAD.Vector(0, 0, 0),
+    FreeCAD.Rotation(0, 0, 0)
+)
+
+# Y axis indicator (green) - should be vertical/UP in Three.js
+y_axis = Part.makeBox(axis_thickness, axis_length, axis_thickness)
+y_axis_obj = doc.addObject("Part::Feature", "Axis_Y_Green")
+y_axis_obj.Shape = y_axis
+y_axis_obj.Placement = FreeCAD.Placement(
+    FreeCAD.Vector(0, 0, 0),
+    FreeCAD.Rotation(0, 0, 0)
+)
+
+# Z axis indicator (blue) - depth in Three.js
+z_axis = Part.makeBox(axis_thickness, axis_thickness, axis_length)
+z_axis_obj = doc.addObject("Part::Feature", "Axis_Z_Blue")
+z_axis_obj.Shape = z_axis
+z_axis_obj.Placement = FreeCAD.Placement(
+    FreeCAD.Vector(0, 0, 0),
+    FreeCAD.Rotation(0, 0, 0)
+)
+
+print("✓ Added axis indicators: X(red), Y(green/UP), Z(blue)")
+
 # Recompute
 doc.recompute()
 print("✓ Document recomputed")
