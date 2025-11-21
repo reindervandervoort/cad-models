@@ -80,28 +80,29 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
-# Calculate offsets to position models correctly via Placement
+# Calculate Z offsets to position models correctly via Placement
 # Using ENGINEERING coordinates (Z-up):
-#   X: horizontal (left-right)
+#   X: horizontal (left-right) - centered at 0
 #   Y: horizontal (row direction - keys spaced along Y)
 #   Z: vertical (height - keycap top at Z=0, switch below)
+#
+# IMPORTANT: The backend centers STL geometry before export, so Placement
+# becomes the direct world position. We use X=0, Y=y_pos for both keycap
+# and switch to ensure they're directly above/below each other.
 
-# Keycap: center in X/Y, top at Z=0
-keycap_x_offset = -(keycap_bbox.XMin + keycap_bbox.XMax) / 2
-keycap_y_offset = -(keycap_bbox.YMin + keycap_bbox.YMax) / 2
-keycap_z_offset = -keycap_bbox.ZMax  # Put top at Z=0
+# Calculate Z offset to put keycap top at Z=0 after backend centering
+keycap_z_height = keycap_bbox.ZMax - keycap_bbox.ZMin
+keycap_z_offset = -keycap_z_height / 2  # After centering, move down by half height
 
-# Switch: use SAME X/Y centering as keycap so they align, top at Z=-25
-# We want switch centered at same X/Y world position as keycap
-switch_x_offset = -(switch_bbox.XMin + switch_bbox.XMax) / 2
-switch_y_offset = -(switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_z_offset = -25 - switch_bbox.ZMax  # Put top at Z=-25
+# Calculate Z offset to put switch top at Z=-25 after backend centering
+switch_z_height = switch_bbox.ZMax - switch_bbox.ZMin
+switch_z_offset = -25 - switch_z_height / 2  # After centering, top at Z=-25
 
-print(f"Keycap offset (engineering X,Y,Z): ({keycap_x_offset:.2f}, {keycap_y_offset:.2f}, {keycap_z_offset:.2f})")
-print(f"Switch offset (engineering X,Y,Z): ({switch_x_offset:.2f}, {switch_y_offset:.2f}, {switch_z_offset:.2f})")
+print(f"Keycap Z height: {keycap_z_height:.2f}mm, Z offset: {keycap_z_offset:.2f}")
+print(f"Switch Z height: {switch_z_height:.2f}mm, Z offset: {switch_z_offset:.2f}")
 
 # Create instances with Placements for GPU instancing
-# Use original shapes - transforms go in Placement for assembly.json
+# Backend centers geometry, so Placement becomes direct world position
 # Engineering coords: X=left-right, Y=row direction, Z=height
 print(f"Creating {keyCount} keycap and switch instances...")
 for i in range(keyCount):
@@ -112,9 +113,10 @@ for i in range(keyCount):
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
     keycap_obj.Shape = keycap_solid
 
-    # Position using Placement (X=center, Y=row position, Z=height)
+    # Position using Placement (X=0, Y=row position, Z=height)
+    # X=0 ensures keycap is directly above switch
     keycap_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset),
+        FreeCAD.Vector(0, y_pos, keycap_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
@@ -122,50 +124,15 @@ for i in range(keyCount):
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
     switch_obj.Shape = switch_solid
 
-    # Position using Placement (X=center, Y=row position, Z=height)
+    # Position using Placement (X=0, Y=row position, Z=height)
+    # X=0 ensures switch is directly below keycap
     switch_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(switch_x_offset, switch_y_offset + y_pos, switch_z_offset),
+        FreeCAD.Vector(0, y_pos, switch_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
-    print(f"✓ Keycap at ({keycap_x_offset:.1f}, {keycap_y_offset + y_pos:.1f}, {keycap_z_offset:.1f})")
-    print(f"✓ Switch at ({switch_x_offset:.1f}, {switch_y_offset + y_pos:.1f}, {switch_z_offset:.1f})")
-
-# Add axis indicators for debugging coordinate system
-# X axis: Red box extending in +X direction
-# Y axis: Green box extending in +Y direction (should be UP in Three.js)
-# Z axis: Blue box extending in +Z direction
-axis_length = 50
-axis_thickness = 2
-
-# X axis indicator (red) - horizontal
-x_axis = Part.makeBox(axis_length, axis_thickness, axis_thickness)
-x_axis_obj = doc.addObject("Part::Feature", "Axis_X_Red")
-x_axis_obj.Shape = x_axis
-x_axis_obj.Placement = FreeCAD.Placement(
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Rotation(0, 0, 0)
-)
-
-# Y axis indicator (green) - should be vertical/UP in Three.js
-y_axis = Part.makeBox(axis_thickness, axis_length, axis_thickness)
-y_axis_obj = doc.addObject("Part::Feature", "Axis_Y_Green")
-y_axis_obj.Shape = y_axis
-y_axis_obj.Placement = FreeCAD.Placement(
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Rotation(0, 0, 0)
-)
-
-# Z axis indicator (blue) - depth in Three.js
-z_axis = Part.makeBox(axis_thickness, axis_thickness, axis_length)
-z_axis_obj = doc.addObject("Part::Feature", "Axis_Z_Blue")
-z_axis_obj.Shape = z_axis
-z_axis_obj.Placement = FreeCAD.Placement(
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Rotation(0, 0, 0)
-)
-
-print("✓ Added axis indicators: X(red), Y(green/UP), Z(blue)")
+    print(f"Keycap {i+1} at (0, {y_pos:.1f}, {keycap_z_offset:.1f})")
+    print(f"Switch {i+1} at (0, {y_pos:.1f}, {switch_z_offset:.1f})")
 
 # Recompute
 doc.recompute()
