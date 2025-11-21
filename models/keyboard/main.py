@@ -80,54 +80,49 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
-# Position keycap so its TOP is at Z=0
-# This means we need to translate it down by its max Z value
-keycap_base = keycap_solid.copy()
-keycap_base.translate(FreeCAD.Vector(0, 0, -keycap_bbox.ZMax))
-
-# Position switch 25mm below the keycap top (which is now at Z=0)
-switch_base = switch_solid.copy()
-switch_base.translate(FreeCAD.Vector(0, 0, -25 - switch_bbox.ZMax))
-
-# Center both in X and Y
+# Calculate offsets to position models correctly via Placement
+# Keycap: center in X/Y, top at Z=0
 keycap_x_offset = -(keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_y_offset = -(keycap_bbox.YMin + keycap_bbox.YMax) / 2
-keycap_base.translate(FreeCAD.Vector(keycap_x_offset, keycap_y_offset, 0))
+keycap_z_offset = -keycap_bbox.ZMax  # Put top at Z=0
 
+# Switch: center in X/Y, top at Z=-25
 switch_x_offset = -(switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_y_offset = -(switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_base.translate(FreeCAD.Vector(switch_x_offset, switch_y_offset, 0))
+switch_z_offset = -25 - switch_bbox.ZMax  # Put top at Z=-25
 
-print("✓ Positioned keycap with top at Z=0")
-print("✓ Positioned switch 25mm below keycap")
+print(f"Keycap offset: ({keycap_x_offset:.2f}, {keycap_y_offset:.2f}, {keycap_z_offset:.2f})")
+print(f"Switch offset: ({switch_x_offset:.2f}, {switch_y_offset:.2f}, {switch_z_offset:.2f})")
 
 # Create instances with Placements for GPU instancing
+# Use original shapes - transforms go in Placement for assembly.json
 print(f"Creating {keyCount} keycap and switch instances...")
 for i in range(keyCount):
-    # Calculate Y position for this instance
+    # Calculate Y position for this instance (along the row)
     y_pos = i * (u + keySpacing)
 
-    # Add keycap with the SAME shape
+    # Add keycap with the original shape
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
-    keycap_obj.Shape = keycap_base
+    keycap_obj.Shape = keycap_solid
 
-    # Position using Placement
+    # Position using Placement (includes centering and Z offset)
     keycap_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(0, y_pos, 0),
+        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
-    # Add switch with the SAME shape
+    # Add switch with the original shape
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
-    switch_obj.Shape = switch_base
+    switch_obj.Shape = switch_solid
 
-    # Position using Placement (same as keycap)
+    # Position using Placement (includes centering and Z offset)
     switch_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(0, y_pos, 0),
+        FreeCAD.Vector(switch_x_offset, switch_y_offset + y_pos, switch_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
-    print(f"✓ Keycap and switch instance {i+1} placed at y={y_pos}mm")
+    print(f"✓ Keycap at ({keycap_x_offset:.1f}, {keycap_y_offset + y_pos:.1f}, {keycap_z_offset:.1f})")
+    print(f"✓ Switch at ({switch_x_offset:.1f}, {switch_y_offset + y_pos:.1f}, {switch_z_offset:.1f})")
 
 # Recompute
 doc.recompute()
