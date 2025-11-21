@@ -86,14 +86,24 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
 #   Y: horizontal (row direction - keys spaced along Y)
 #   Z: vertical (height)
 #
-# IMPORTANT: Backend centers X/Y in exported STL files, so do NOT add
-# X/Y offsets here. Just use (0, y_pos, z_offset) for both parts.
+# IMPORTANT: Backend applies Placement to BOTH STL geometry AND assembly.json
+# position, causing a double-offset. So use HALF the centering offset.
+# Final = STL_center + assembly.json = (original + P) + P = original + 2*P
+# To center: -87.5 + 2*P = 0, so P = 43.75
+
+keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
+keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
+keycap_x_offset = -keycap_center_x / 2  # Half offset to compensate for double-application
+keycap_y_offset = -keycap_center_y / 2
 
 keycap_z_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 keycap_z_offset = -keycap_z_height / 2  # Center Z, top at ~0
 
 switch_z_height = switch_bbox.ZMax - switch_bbox.ZMin
 switch_z_offset = -switch_z_height / 2  # Center Z, top at ~0 (overlapping with keycap)
+
+print(f"Keycap center: ({keycap_center_x:.2f}, {keycap_center_y:.2f})")
+print(f"Keycap X/Y offset (half): ({keycap_x_offset:.2f}, {keycap_y_offset:.2f})")
 
 print(f"Keycap Z: height={keycap_z_height:.2f}, offset={keycap_z_offset:.2f}")
 print(f"Switch Z: height={switch_z_height:.2f}, offset={switch_z_offset:.2f}")
@@ -110,9 +120,9 @@ for i in range(keyCount):
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
     keycap_obj.Shape = keycap_solid
 
-    # Backend centers X/Y in STL export, so use (0, y_pos)
+    # Use half-offset to compensate for backend double-application
     keycap_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(0, y_pos, keycap_z_offset),
+        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
@@ -120,13 +130,13 @@ for i in range(keyCount):
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
     switch_obj.Shape = switch_solid
 
-    # Switch also uses (0, y_pos) since backend centers STL
+    # Switch mesh is already centered, so use (0, y_pos)
     switch_obj.Placement = FreeCAD.Placement(
         FreeCAD.Vector(0, y_pos, switch_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
-    print(f"Keycap {i+1} at (0, {y_pos:.1f}, {keycap_z_offset:.1f})")
+    print(f"Keycap {i+1} at ({keycap_x_offset:.1f}, {keycap_y_offset + y_pos:.1f}, {keycap_z_offset:.1f})")
     print(f"Switch {i+1} at (0, {y_pos:.1f}, {switch_z_offset:.1f})")
 
 # Recompute
