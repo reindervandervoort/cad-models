@@ -100,7 +100,7 @@ keycap_z_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 keycap_z_offset = -keycap_z_height / 2  # Center Z, top at ~0
 
 switch_z_height = switch_bbox.ZMax - switch_bbox.ZMin
-switch_z_offset = -switch_z_height / 2  # Center Z, top at ~0 (overlapping with keycap)
+switch_z_offset = -switch_z_height / 2 - 2.5  # 2.5mm below keycap
 
 print(f"Keycap center: ({keycap_center_x:.2f}, {keycap_center_y:.2f})")
 print(f"Keycap X/Y offset (half): ({keycap_x_offset:.2f}, {keycap_y_offset:.2f})")
