@@ -80,26 +80,31 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
-# Calculate Z offsets for positioning
+# Calculate offsets for positioning
 # Using ENGINEERING coordinates (Z-up):
-#   X: horizontal (left-right) - centered at 0
+#   X: horizontal (left-right)
 #   Y: horizontal (row direction - keys spaced along Y)
 #   Z: vertical (height)
 #
-# NOTE: Backend NOW centers X/Y in exported STL geometry, so we only need
-# to set X=0, Y=y_pos. Only Z offset is needed for height positioning.
+# STL Analysis shows:
+#   - Keycap STL: center at (-87.5, -81.5) - needs offset to align
+#   - Switch STL: center at (0, 0) - already centered
+# So keycap needs X/Y offset to match switch position.
 
+keycap_x_offset = -keycap_bbox.XMin - (keycap_bbox.XMax - keycap_bbox.XMin) / 2  # = 87.5
+keycap_y_offset = -keycap_bbox.YMin - (keycap_bbox.YMax - keycap_bbox.YMin) / 2  # = 81.5
 keycap_z_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 keycap_z_offset = -keycap_z_height / 2  # Center Z, top at ~0
 
+# Switch is already centered, just need Z offset
 switch_z_height = switch_bbox.ZMax - switch_bbox.ZMin
 switch_z_offset = -switch_z_height / 2  # Center Z, top at ~0 (overlapping with keycap)
 
-print(f"Keycap Z height: {keycap_z_height:.2f}, Z offset: {keycap_z_offset:.2f}")
-print(f"Switch Z height: {switch_z_height:.2f}, Z offset: {switch_z_offset:.2f}")
+print(f"Keycap offsets: X={keycap_x_offset:.2f}, Y={keycap_y_offset:.2f}, Z={keycap_z_offset:.2f}")
+print(f"Switch Z offset: {switch_z_offset:.2f}")
 
 # Create instances with Placements for GPU instancing
-# Backend centers X/Y in STL, so Placement is direct world position
+# Keycap needs X/Y offset to center, switch is already centered
 # Engineering coords: X=left-right, Y=row direction, Z=height
 print(f"Creating {keyCount} keycap and switch instances...")
 for i in range(keyCount):
@@ -110,9 +115,9 @@ for i in range(keyCount):
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
     keycap_obj.Shape = keycap_solid
 
-    # Position at (0, y_pos, z_offset) - STL is already centered
+    # Keycap needs X/Y offset to center it at world (0, y_pos)
     keycap_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(0, y_pos, keycap_z_offset),
+        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
@@ -120,13 +125,13 @@ for i in range(keyCount):
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
     switch_obj.Shape = switch_solid
 
-    # Position at (0, y_pos, z_offset) - STL is already centered
+    # Switch is already centered, just add y_pos
     switch_obj.Placement = FreeCAD.Placement(
         FreeCAD.Vector(0, y_pos, switch_z_offset),
         FreeCAD.Rotation(0, 0, 0)
     )
 
-    print(f"Keycap {i+1} at (0, {y_pos:.1f}, {keycap_z_offset:.1f})")
+    print(f"Keycap {i+1} at ({keycap_x_offset:.1f}, {keycap_y_offset + y_pos:.1f}, {keycap_z_offset:.1f})")
     print(f"Switch {i+1} at (0, {y_pos:.1f}, {switch_z_offset:.1f})")
 
 # Recompute
