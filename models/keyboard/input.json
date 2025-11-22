@@ -1,7 +1,9 @@
 {
   "u": 18,
   "keyHeight": 6,
-  "keySpacing": 2,
   "keyCount": 10,
-  "switchOffset": 0.5
+  "switchOffset": 0.5,
+  "pitch": 45,
+  "handDiameter": 192,
+  "horizontalSpace": 2
 }

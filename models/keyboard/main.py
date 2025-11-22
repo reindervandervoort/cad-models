@@ -11,6 +11,7 @@ import Part
 import Mesh
 import json
 import os
+import math
 
 print("Starting keyboard generation with STL files...")
 print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for standalone'}")
@@ -30,12 +31,25 @@ with open(input_file, 'r') as f:
     params = json.load(f)
 
 u = params['u']  # 18 mm
-keyHeight = params['keyHeight']  # 5 mm (not used with STL)
-keySpacing = params['keySpacing']  # 2 mm
-keyCount = params['keyCount']  # 9
+keyHeight = params['keyHeight']  # 6 mm (not used with STL)
+keyCount = params['keyCount']  # 10
 switchOffset = params.get('switchOffset', 0.5)  # mm below keycap
+pitch = params['pitch']  # 45 degrees
+handDiameter = params['handDiameter']  # 192 mm
+horizontalSpace = params['horizontalSpace']  # 2 mm gap at key surface
 
-print(f"Parameters: u={u}mm, keySpacing={keySpacing}mm, keyCount={keyCount}, switchOffset={switchOffset}mm")
+# Ring radius and axis height
+ringRadius = handDiameter / 2  # 96 mm
+ringAxisZ = ringRadius  # Axis is at Z = 96mm (above origin)
+
+# Calculate the angle between keys based on horizontalSpace at the key surface
+# Arc length = u + horizontalSpace, so angle = arc_length / radius
+arcLengthPerKey = u + horizontalSpace
+angleBetweenKeys = arcLengthPerKey / ringRadius  # in radians
+
+print(f"Parameters: u={u}mm, keyCount={keyCount}, switchOffset={switchOffset}mm")
+print(f"Pitch: {pitch}°, handDiameter={handDiameter}mm, horizontalSpace={horizontalSpace}mm")
+print(f"Ring radius: {ringRadius}mm, angle between keys: {math.degrees(angleBetweenKeys):.2f}°")
 
 # Load STL files
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
@@ -89,8 +103,6 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
 #
 # IMPORTANT: Backend applies Placement to BOTH STL geometry AND assembly.json
 # position, causing a double-offset. So use HALF the centering offset.
-# Final = STL_center + assembly.json = (original + P) + P = original + 2*P
-# To center: -87.5 + 2*P = 0, so P = 43.75
 
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
@@ -109,36 +121,49 @@ print(f"Keycap X/Y offset (half): ({keycap_x_offset:.2f}, {keycap_y_offset:.2f})
 print(f"Keycap Z: height={keycap_z_height:.2f}, offset={keycap_z_offset:.2f}")
 print(f"Switch Z: height={switch_z_height:.2f}, offset={switch_z_offset:.2f}")
 
-# Create instances with Placements for GPU instancing
-# Keycap needs X/Y offset to center, switch is already centered
-# Engineering coords: X=left-right, Y=row direction, Z=height
+# Calculate the total angular span and center it
+totalAngle = (keyCount - 1) * angleBetweenKeys
+startAngle = -totalAngle / 2  # Center the keys around the bottom of the ring
+
+# Create instances with pitch and ring arrangement
 print(f"Creating {keyCount} keycap and switch instances...")
 for i in range(keyCount):
-    # Calculate Y position for this instance (along the row)
-    y_pos = i * (u + keySpacing)
+    # Calculate roll angle for this key (position on the ring)
+    rollAngle = startAngle + i * angleBetweenKeys  # angle from bottom of ring
 
-    # Add keycap with the original shape
+    # Calculate Y and Z position on the ring
+    # Angle measured from -Z direction (bottom of ring), positive = counterclockwise from +X view
+    # At rollAngle=0, key is at the bottom (Y=0, Z=0 relative to ring center)
+    y_pos = ringRadius * math.sin(rollAngle)
+    z_pos = ringAxisZ - ringRadius * math.cos(rollAngle)
+
+    # Create rotation combining pitch and roll
+    # Pitch: rotation around Y axis (top tilts back)
+    # Roll: rotation around X axis (orient tangent to ring)
+    pitchRotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch)
+    rollRotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), math.degrees(rollAngle))
+    combinedRotation = rollRotation.multiply(pitchRotation)
+
+    # Add keycap with combined transformation
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
     keycap_obj.Shape = keycap_solid
 
-    # Use half-offset to compensate for backend double-application
     keycap_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset),
-        FreeCAD.Rotation(0, 0, 0)
+        FreeCAD.Vector(keycap_x_offset, keycap_y_offset + y_pos, keycap_z_offset + z_pos),
+        combinedRotation
     )
 
-    # Add switch with the original shape
+    # Add switch with combined transformation
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
     switch_obj.Shape = switch_solid
 
-    # Switch mesh is already centered, so use (0, y_pos)
     switch_obj.Placement = FreeCAD.Placement(
-        FreeCAD.Vector(0, y_pos, switch_z_offset),
-        FreeCAD.Rotation(0, 0, 0)
+        FreeCAD.Vector(0, y_pos, switch_z_offset + z_pos),
+        combinedRotation
     )
 
-    print(f"Keycap {i+1} at ({keycap_x_offset:.1f}, {keycap_y_offset + y_pos:.1f}, {keycap_z_offset:.1f})")
-    print(f"Switch {i+1} at (0, {y_pos:.1f}, {switch_z_offset:.1f})")
+    rollDeg = math.degrees(rollAngle)
+    print(f"✓ Key {i+1} at roll={rollDeg:.1f}°, y={y_pos:.1f}mm, z={z_pos:.1f}mm")
 
 # Recompute
 doc.recompute()
