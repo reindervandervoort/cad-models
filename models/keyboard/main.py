@@ -95,25 +95,26 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
-# Center both shapes at origin (bake centering into geometry, not Placement)
-# This ensures instancing via Placement works correctly
+# Center both shapes at origin in X and Y, but align them vertically
+# Keycap: center X/Y, place bottom at Z=0
+# Switch: center X/Y, place top at Z=-switchOffset (so it sits below keycap)
+
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
-keycap_center_z = (keycap_bbox.ZMin + keycap_bbox.ZMax) / 2
+keycap_bottom_z = keycap_bbox.ZMin
 
 switch_center_x = (switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_center_y = (switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_center_z = (switch_bbox.ZMin + switch_bbox.ZMax) / 2
+switch_top_z = switch_bbox.ZMax
 
-# Translate shapes to center them at origin
-keycap_solid.translate(FreeCAD.Vector(-keycap_center_x, -keycap_center_y, -keycap_center_z))
-switch_solid.translate(FreeCAD.Vector(-switch_center_x, -switch_center_y, -switch_center_z))
+# Translate keycap: center X/Y, bottom at Z=0
+keycap_solid.translate(FreeCAD.Vector(-keycap_center_x, -keycap_center_y, -keycap_bottom_z))
 
-print(f"✓ Centered keycap at origin (was at {keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_center_z:.2f})")
-print(f"✓ Centered switch at origin (was at {switch_center_x:.2f}, {switch_center_y:.2f}, {switch_center_z:.2f})")
+# Translate switch: center X/Y, top at Z=-switchOffset (below keycap bottom)
+switch_solid.translate(FreeCAD.Vector(-switch_center_x, -switch_center_y, -switch_top_z - switchOffset))
 
-# Z offset for switch (below keycap)
-switch_z_local_offset = -switchOffset
+print(f"✓ Keycap centered X/Y, bottom at Z=0")
+print(f"✓ Switch centered X/Y, top at Z={-switchOffset}mm (below keycap)")
 
 # Calculate the total angular span and center it
 totalAngle = (keyCount - 1) * angleBetweenKeys
@@ -161,12 +162,9 @@ for i in range(keyCount):
         switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
         switch_obj.Shape = switch_base.Shape
 
-    # Apply Placement for positioning (same position for keycap and switch)
+    # Apply Placement for positioning (same position for both - offset baked into geometry)
     keycap_obj.Placement = FreeCAD.Placement(ring_position, combinedRotation)
-
-    # Switch has a small Z offset (below keycap) - apply in local space via Placement
-    switch_position = FreeCAD.Vector(0, y_pos, z_pos + switch_z_local_offset)
-    switch_obj.Placement = FreeCAD.Placement(switch_position, combinedRotation)
+    switch_obj.Placement = FreeCAD.Placement(ring_position, combinedRotation)
 
     rollDeg = math.degrees(rollAngle)
     print(f"✓ Key {i+1} at roll={rollDeg:.1f}°, y={y_pos:.1f}mm, z={z_pos:.1f}mm")
