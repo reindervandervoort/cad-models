@@ -145,4 +145,4 @@ doc.recompute()
 print("✓ Document recomputed")
 
 print(f"✓ Keyboard generated successfully with {len(doc.Objects)} object(s)")
-print("SUCCESS: Model generation complete")
+print(f"SUCCESS: Model generation complete with {keyCount} keys")
