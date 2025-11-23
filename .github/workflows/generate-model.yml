@@ -16,16 +16,20 @@ on:
         required: true
         default: '1.0.0'
 
+env:
+  POLL_INTERVAL: 10  # seconds between status checks
+  POLL_TIMEOUT: 600  # max seconds to wait for completion (10 min)
+
 jobs:
-  trigger-generation:
-    name: Trigger Fargate Task
+  generate-model:
+    name: Generate Model
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Need 2 commits to compare HEAD~1 and HEAD
+          fetch-depth: 2
 
       - name: Determine model and version
         id: vars
@@ -35,7 +39,6 @@ jobs:
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
             echo "change_desc=Manual trigger" >> $GITHUB_OUTPUT
           else
-            # Extract model from changed files
             CHANGED_FILE=$(git diff --name-only HEAD~1 HEAD | grep 'models/.*/.*\.py' | head -1)
             if [ -n "$CHANGED_FILE" ]; then
               MODEL_NAME=$(echo "$CHANGED_FILE" | cut -d'/' -f2)
@@ -44,8 +47,6 @@ jobs:
               echo "model_name=demo" >> $GITHUB_OUTPUT
             fi
             echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-            # Use only first line of commit message for JSON compatibility
-            # Full message with newlines breaks AWS ECS --overrides JSON
             COMMIT_SUBJECT=$(echo "${{ github.event.head_commit.message }}" | head -1)
             echo "change_desc=$COMMIT_SUBJECT" >> $GITHUB_OUTPUT
           fi
@@ -57,53 +58,161 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Run ECS Fargate Task
-        id: run-task
+      - name: Send job to SQS queue
+        id: send-job
         run: |
-          TASK_ARN=$(aws ecs run-task \
-            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
-            --task-definition ${{ secrets.ECS_TASK_DEFINITION }} \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
-            --overrides "{
-              \"containerOverrides\": [{
-                \"name\": \"freecad-container\",
-                \"environment\": [
-                  {\"name\": \"MODEL_NAME\", \"value\": \"${{ steps.vars.outputs.model_name }}\"},
-                  {\"name\": \"VERSION\", \"value\": \"${{ steps.vars.outputs.version }}\"},
-                  {\"name\": \"S3_BUCKET\", \"value\": \"${{ secrets.S3_BUCKET }}\"},
-                  {\"name\": \"GITHUB_REPO_URL\", \"value\": \"${{ github.server_url }}/${{ github.repository }}.git\"},
-                  {\"name\": \"COMMIT_SHA\", \"value\": \"${{ github.sha }}\"},
-                  {\"name\": \"CHANGE_DESCRIPTION\", \"value\": \"${{ steps.vars.outputs.change_desc }}\"}
-                ]
-              }]
-            }" \
-            --query 'tasks[0].taskArn' \
+          MESSAGE_BODY=$(cat <<EOF
+          {
+            "model_name": "${{ steps.vars.outputs.model_name }}",
+            "version": "${{ steps.vars.outputs.version }}",
+            "github_repo_url": "${{ github.server_url }}/${{ github.repository }}.git",
+            "commit_sha": "${{ github.sha }}",
+            "change_description": "${{ steps.vars.outputs.change_desc }}"
+          }
+          EOF
+          )
+
+          MESSAGE_ID=$(aws sqs send-message \
+            --queue-url "${{ secrets.SQS_QUEUE_URL }}" \
+            --message-body "$MESSAGE_BODY" \
+            --query 'MessageId' \
             --output text)
 
-          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
-          echo "✓ Task ARN: $TASK_ARN"
+          echo "message_id=$MESSAGE_ID" >> $GITHUB_OUTPUT
+          echo "✓ Job sent to queue: $MESSAGE_ID"
 
-      - name: Output summary
+      - name: Ensure Fargate task is running
         run: |
-          echo "## Model Generation Triggered 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Model**: \`${{ steps.vars.outputs.model_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: \`${{ steps.vars.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Task ARN**: \`${{ steps.run-task.outputs.task_arn }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Check [CloudWatch Logs](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Fecs$252Fcad-dev-freecad)" >> $GITHUB_STEP_SUMMARY
-          echo "2. View model at: https://d2j2tqi3nk8zjp.cloudfront.net/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "3. Check status: \`aws s3 cp s3://${{ secrets.S3_BUCKET }}/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}/status.json -\`" >> $GITHUB_STEP_SUMMARY
+          # Check if any tasks are running in the cluster
+          RUNNING_TASKS=$(aws ecs list-tasks \
+            --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
+            --desired-status RUNNING \
+            --query 'taskArns' \
+            --output text)
 
-          echo ""
-          echo "✓ Model generation triggered successfully!"
-          echo "✓ Model: ${{ steps.vars.outputs.model_name }}"
-          echo "✓ Version: ${{ steps.vars.outputs.version }}"
-          echo "✓ Task ARN: ${{ steps.run-task.outputs.task_arn }}"
-          echo ""
-          echo "📊 Monitor progress:"
-          echo "   CloudWatch: https://console.aws.amazon.com/cloudwatch"
-          echo "   View model: https://d2j2tqi3nk8zjp.cloudfront.net/models/${{ steps.vars.outputs.model_name }}/${{ steps.vars.outputs.version }}"
+          if [ -z "$RUNNING_TASKS" ] || [ "$RUNNING_TASKS" == "None" ]; then
+            echo "No running tasks found, starting new task..."
+            TASK_ARN=$(aws ecs run-task \
+              --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
+              --task-definition "${{ secrets.ECS_TASK_DEFINITION }}" \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
+              --query 'tasks[0].taskArn' \
+              --output text)
+            echo "✓ Started task: $TASK_ARN"
+          else
+            echo "✓ Task already running: $RUNNING_TASKS"
+          fi
+
+      - name: Wait for model generation
+        id: wait
+        run: |
+          MODEL="${{ steps.vars.outputs.model_name }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          STATUS_KEY="models/${MODEL}/${VERSION}/status.json"
+
+          echo "Polling for completion: s3://${{ secrets.S3_BUCKET }}/${STATUS_KEY}"
+
+          ELAPSED=0
+          while [ $ELAPSED -lt $POLL_TIMEOUT ]; do
+            # Try to get status file
+            STATUS=$(aws s3 cp "s3://${{ secrets.S3_BUCKET }}/${STATUS_KEY}" - 2>/dev/null || echo '{"status":"pending"}')
+            CURRENT_STATUS=$(echo "$STATUS" | jq -r '.status // "pending"')
+
+            echo "Status: $CURRENT_STATUS (${ELAPSED}s elapsed)"
+
+            if [ "$CURRENT_STATUS" == "ready" ]; then
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "✓ Model generation completed!"
+              exit 0
+            elif [ "$CURRENT_STATUS" == "failed" ]; then
+              ERROR=$(echo "$STATUS" | jq -r '.error // "Unknown error"')
+              echo "status=failed" >> $GITHUB_OUTPUT
+              echo "error=$ERROR" >> $GITHUB_OUTPUT
+              echo "✗ Model generation failed: $ERROR"
+              exit 1
+            fi
+
+            sleep $POLL_INTERVAL
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          echo "status=timeout" >> $GITHUB_OUTPUT
+          echo "✗ Timeout waiting for model generation"
+          exit 1
+
+      - name: Fetch results
+        if: steps.wait.outputs.status == 'success'
+        id: results
+        run: |
+          MODEL="${{ steps.vars.outputs.model_name }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+
+          # Get status.json for full results
+          STATUS=$(aws s3 cp "s3://${{ secrets.S3_BUCKET }}/models/${MODEL}/${VERSION}/status.json" -)
+
+          echo "status_json<<EOF" >> $GITHUB_OUTPUT
+          echo "$STATUS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Check for screenshots
+          SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' || echo "")
+          echo "screenshots=$SCREENSHOTS" >> $GITHUB_OUTPUT
+
+      - name: Generate summary
+        if: always()
+        run: |
+          MODEL="${{ steps.vars.outputs.model_name }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          CLOUDFRONT_URL="${{ secrets.CLOUDFRONT_URL }}"
+
+          echo "## Model Generation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Model**: \`$MODEL\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: \`${{ steps.wait.outputs.status || 'unknown' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.wait.outputs.status }}" == "success" ]; then
+            echo "### Screenshots" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # List screenshots from S3
+            SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' || echo "")
+
+            if [ -n "$SCREENSHOTS" ]; then
+              echo "| View | Image |" >> $GITHUB_STEP_SUMMARY
+              echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+
+              for SCREENSHOT in $SCREENSHOTS; do
+                NAME="${SCREENSHOT%.png}"
+                URL="${CLOUDFRONT_URL}/screenshots/${MODEL}/${VERSION}/${SCREENSHOT}"
+                echo "| $NAME | ![$NAME]($URL) |" >> $GITHUB_STEP_SUMMARY
+              done
+            else
+              echo "_No screenshots available_" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Model Files" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- [Assembly Manifest](${CLOUDFRONT_URL}/models/${MODEL}/${VERSION}/assembly.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- [High LOD STL](${CLOUDFRONT_URL}/models/${MODEL}/${VERSION}/high.stl)" >> $GITHUB_STEP_SUMMARY
+            echo "- [Medium LOD STL](${CLOUDFRONT_URL}/models/${MODEL}/${VERSION}/medium.stl)" >> $GITHUB_STEP_SUMMARY
+            echo "- [Low LOD STL](${CLOUDFRONT_URL}/models/${MODEL}/${VERSION}/low.stl)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### View Model" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[Open in 3D Viewer](${{ secrets.FRONTEND_URL }}/viewer?model=${MODEL}&version=${VERSION})" >> $GITHUB_STEP_SUMMARY
+
+          elif [ "${{ steps.wait.outputs.status }}" == "failed" ]; then
+            echo "### Error" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.wait.outputs.error }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "_Job ID: ${{ steps.send-job.outputs.message_id }}_" >> $GITHUB_STEP_SUMMARY
