@@ -4,6 +4,12 @@ Keyboard Model
 Creates a row of keycaps and switches from STL files
 Uses kailh_choc_low_profile_keycap.stl and kailhlowprofilev102.stl
 Backend provides 'doc' variable - we add objects to it
+
+Transformation Hierarchy (inner to outer):
+1. mesh_centering_transform - Centers STL geometry (XY centered, bottom at Z=0)
+2. key_assembly_transform - Stacks keycap + switch with vertical gap
+3. key_orientation_transform - Tilts key backward (pitch around Y)
+4. row_position_transform - Positions key on ring arc (roll around X + translation)
 """
 
 import FreeCAD
@@ -12,6 +18,172 @@ import Mesh
 import json
 import os
 import math
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+# =============================================================================
+# TRANSFORM FUNCTIONS - Hierarchical transformation system
+# Each returns a 4x4 homogeneous transformation matrix
+# =============================================================================
+
+
+def mesh_centering_transform(bbox_min: tuple, bbox_max: tuple) -> np.ndarray:
+    """
+    Level 1: Center mesh geometry.
+
+    Translates mesh so that:
+    - XY is centered at origin
+    - Bottom (Z min) is at Z=0
+
+    Args:
+        bbox_min: (xmin, ymin, zmin) of original mesh
+        bbox_max: (xmax, ymax, zmax) of original mesh
+
+    Returns:
+        4x4 translation matrix
+    """
+    center_x = (bbox_min[0] + bbox_max[0]) / 2
+    center_y = (bbox_min[1] + bbox_max[1]) / 2
+    bottom_z = bbox_min[2]
+
+    matrix = np.eye(4)
+    matrix[0, 3] = -center_x  # Center X
+    matrix[1, 3] = -center_y  # Center Y
+    matrix[2, 3] = -bottom_z  # Move bottom to Z=0
+
+    return matrix
+
+
+def key_assembly_transform(z_offset: float) -> np.ndarray:
+    """
+    Level 2: Position component in key assembly stack.
+
+    For keycap: z_offset = 0 (bottom at Z=0)
+    For switch: z_offset = -switch_height - gap (top below keycap bottom)
+
+    Args:
+        z_offset: Vertical offset for this component
+
+    Returns:
+        4x4 translation matrix
+    """
+    matrix = np.eye(4)
+    matrix[2, 3] = z_offset
+    return matrix
+
+
+def key_orientation_transform(pitch_deg: float) -> np.ndarray:
+    """
+    Level 3: Tilt key backward (pitch rotation).
+
+    Rotates around the Y axis so the top of the key tilts away
+    from the user (toward -X in local coordinates).
+
+    Args:
+        pitch_deg: Pitch angle in degrees (positive = top tilts back)
+
+    Returns:
+        4x4 rotation matrix
+    """
+    rotation = R.from_euler('Y', pitch_deg, degrees=True)
+
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation.as_matrix()
+    return matrix
+
+
+def row_position_transform(
+    roll_rad: float,
+    ring_radius: float,
+    ring_axis_z: float
+) -> np.ndarray:
+    """
+    Level 4: Position key on the ring arc.
+
+    Combines:
+    - Rotation around X axis (roll) to orient tangent to ring
+    - Translation to position on the ring circumference
+
+    The ring axis is along Y at height Z=ring_axis_z.
+    At roll_rad=0, the key is at the bottom of the ring (Y=0, Z=0).
+
+    Args:
+        roll_rad: Angular position on ring in radians (from bottom)
+        ring_radius: Radius of the ring
+        ring_axis_z: Z position of the ring axis
+
+    Returns:
+        4x4 transformation matrix (rotation + translation)
+    """
+    # Rotation around X axis
+    rotation = R.from_euler('X', roll_rad, degrees=False)
+
+    # Position on ring circumference
+    # At roll=0: Y=0, Z=ring_axis_z - ring_radius (bottom of ring)
+    y_pos = ring_radius * math.sin(roll_rad)
+    z_pos = ring_axis_z - ring_radius * math.cos(roll_rad)
+
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation.as_matrix()
+    matrix[0, 3] = 0.0      # X stays at 0 (keys in YZ plane)
+    matrix[1, 3] = y_pos
+    matrix[2, 3] = z_pos
+
+    return matrix
+
+
+def compose_transforms(*matrices: np.ndarray) -> np.ndarray:
+    """
+    Compose multiple transformation matrices.
+
+    Transforms are applied inner-to-outer (first argument is innermost).
+    Mathematically: result = matrices[-1] @ ... @ matrices[1] @ matrices[0]
+
+    Args:
+        *matrices: Transformation matrices in order of application
+
+    Returns:
+        Combined 4x4 transformation matrix
+    """
+    result = np.eye(4)
+    for m in matrices:
+        result = m @ result
+    return result
+
+
+def matrix_to_placement(matrix: np.ndarray):
+    """
+    Convert 4x4 matrix to FreeCAD Placement.
+
+    Extracts position and rotation (as Euler angles) from the matrix
+    and creates a FreeCAD Placement object.
+
+    Args:
+        matrix: 4x4 homogeneous transformation matrix
+
+    Returns:
+        FreeCAD.Placement object
+    """
+    # Extract position
+    position = FreeCAD.Vector(
+        float(matrix[0, 3]),
+        float(matrix[1, 3]),
+        float(matrix[2, 3])
+    )
+
+    # Extract rotation as quaternion (more robust than Euler)
+    rotation_scipy = R.from_matrix(matrix[:3, :3])
+    quat = rotation_scipy.as_quat()  # [x, y, z, w] in scipy
+
+    # FreeCAD Rotation from quaternion: (x, y, z, w)
+    rotation = FreeCAD.Rotation(quat[0], quat[1], quat[2], quat[3])
+
+    return FreeCAD.Placement(position, rotation)
+
+
+# =============================================================================
+# MAIN SCRIPT
+# =============================================================================
 
 print("Starting keyboard generation with STL files...")
 print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for standalone'}")
@@ -19,9 +191,9 @@ print(f"Using document: {doc.Name if 'doc' in dir() else 'Creating new for stand
 # If running standalone (not from backend), create doc
 if 'doc' not in dir():
     doc = FreeCAD.newDocument("Keyboard")
-    print("✓ Created new document (standalone mode)")
+    print("Created new document (standalone mode)")
 else:
-    print("✓ Using provided document (backend mode)")
+    print("Using provided document (backend mode)")
 
 # Load parameters from input.json
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,53 +210,50 @@ pitch = params['pitch']  # 45 degrees
 handDiameter = params['handDiameter']  # 192 mm
 horizontalSpace = params['horizontalSpace']  # 2 mm gap at key surface
 
-# Ring radius and axis height
+# Ring parameters
 ringRadius = handDiameter / 2  # 96 mm
 ringAxisZ = ringRadius  # Axis is at Z = 96mm (above origin)
 
-# Calculate the angle between keys based on horizontalSpace at the key surface
-# Arc length = u + horizontalSpace, so angle = arc_length / radius
+# Calculate angle between keys based on arc length
 arcLengthPerKey = u + horizontalSpace
-angleBetweenKeys = arcLengthPerKey / ringRadius  # in radians
+angleBetweenKeys = arcLengthPerKey / ringRadius  # radians
 
 print(f"Parameters: u={u}mm, keyCount={keyCount}, switchOffset={switchOffset}mm")
-print(f"Pitch: {pitch}°, handDiameter={handDiameter}mm, horizontalSpace={horizontalSpace}mm")
-print(f"Ring radius: {ringRadius}mm, angle between keys: {math.degrees(angleBetweenKeys):.2f}°")
+print(f"Pitch: {pitch} deg, handDiameter={handDiameter}mm, horizontalSpace={horizontalSpace}mm")
+print(f"Ring radius: {ringRadius}mm, angle between keys: {math.degrees(angleBetweenKeys):.2f} deg")
 
-# Load STL files ONCE
+# =============================================================================
+# LOAD STL FILES
+# =============================================================================
+
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 switch_stl = os.path.join(script_dir, "kailhlowprofilev102.stl")
 
 print("Loading STL files...")
-# Load as mesh first to convert to solid
-keycap_mesh = Mesh.Mesh(keycap_stl)
-switch_mesh = Mesh.Mesh(switch_stl)
 
-# Convert mesh to solid shape
+# Load keycap mesh
+keycap_mesh = Mesh.Mesh(keycap_stl)
 keycap_shape = Part.Shape()
 keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
-# Try to create solid, fall back to shell if it fails
 try:
     keycap_solid = Part.makeSolid(keycap_shape)
-    print("✓ Keycap converted to solid")
-except:
+    print("Keycap converted to solid")
+except Exception:
     keycap_solid = keycap_shape
-    print("✓ Keycap loaded as shell (not solid)")
+    print("Keycap loaded as shell (not solid)")
 
+# Load switch mesh
+switch_mesh = Mesh.Mesh(switch_stl)
 switch_shape = Part.Shape()
 switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
-# Try to create solid, fall back to shell if it fails
 try:
     switch_solid = Part.makeSolid(switch_shape)
-    print("✓ Switch converted to solid")
-except:
+    print("Switch converted to solid")
+except Exception:
     switch_solid = switch_shape
-    print("✓ Switch loaded as shell (not solid)")
+    print("Switch loaded as shell (not solid)")
 
-print(f"✓ Loaded keycap STL: {keycap_stl}")
-print(f"✓ Loaded switch STL: {switch_stl}")
-
-# Get bounding boxes to understand dimensions
+# Get original bounding boxes
 keycap_bbox = keycap_solid.BoundBox
 switch_bbox = switch_solid.BoundBox
 
@@ -95,116 +264,132 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
-# Position geometry for proper stacking and rotation:
-# - XY centered at origin (for rotation around key center)
-# - Keycap: bottom at Z=0 (extends upward) - this is the mounting point
-# - Switch: top at Z=-switchOffset (extends downward with gap)
-# This creates a natural pivot point at the keycap-switch interface
+# =============================================================================
+# PRE-COMPUTE LEVEL 1 TRANSFORMS (mesh centering)
+# =============================================================================
 
-keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
-keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
-keycap_bottom_z = keycap_bbox.ZMin  # Bottom of keycap
+keycap_centering = mesh_centering_transform(
+    (keycap_bbox.XMin, keycap_bbox.YMin, keycap_bbox.ZMin),
+    (keycap_bbox.XMax, keycap_bbox.YMax, keycap_bbox.ZMax)
+)
 
-switch_center_x = (switch_bbox.XMin + switch_bbox.XMax) / 2
-switch_center_y = (switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_top_z = switch_bbox.ZMax  # Top of switch
+switch_centering = mesh_centering_transform(
+    (switch_bbox.XMin, switch_bbox.YMin, switch_bbox.ZMin),
+    (switch_bbox.XMax, switch_bbox.YMax, switch_bbox.ZMax)
+)
 
-print(f"Keycap original bounds: Z({keycap_bbox.ZMin:.2f} to {keycap_bbox.ZMax:.2f})")
-print(f"Switch original bounds: Z({switch_bbox.ZMin:.2f} to {switch_bbox.ZMax:.2f})")
-
-# Translate keycap: XY centered, bottom at Z=0
+# Apply centering to the base shapes (this is baked into the geometry)
 keycap_solid = keycap_solid.translated(FreeCAD.Vector(
-    -keycap_center_x,
-    -keycap_center_y,
-    -keycap_bottom_z  # Move bottom to Z=0
+    keycap_centering[0, 3],
+    keycap_centering[1, 3],
+    keycap_centering[2, 3]
 ))
 
-# Translate switch: XY centered, top at Z=-switchOffset
 switch_solid = switch_solid.translated(FreeCAD.Vector(
-    -switch_center_x,
-    -switch_center_y,
-    -switch_top_z - switchOffset  # Move top to Z=-switchOffset
+    switch_centering[0, 3],
+    switch_centering[1, 3],
+    switch_centering[2, 3]
 ))
 
-# Verify positioning
-keycap_bbox_new = keycap_solid.BoundBox
-switch_bbox_new = switch_solid.BoundBox
-print(f"Keycap positioned: Z({keycap_bbox_new.ZMin:.2f} to {keycap_bbox_new.ZMax:.2f}) - bottom at 0")
-print(f"Switch positioned: Z({switch_bbox_new.ZMin:.2f} to {switch_bbox_new.ZMax:.2f}) - top at {-switchOffset}")
-print(f"Vertical gap between keycap bottom and switch top: {switchOffset}mm")
+# Get switch height for assembly offset calculation
+switch_height = switch_bbox.ZMax - switch_bbox.ZMin
 
-# Calculate the total angular span and center it
-totalAngle = (keyCount - 1) * angleBetweenKeys
-startAngle = -totalAngle / 2  # Center the keys around the bottom of the ring
+print(f"Keycap centered: bottom at Z=0")
+print(f"Switch centered: bottom at Z=0, height={switch_height:.2f}mm")
 
-# Create base geometry objects ONCE - these define the canonical shape
-# All instances will reference these same shapes (backend detects via shape hash)
-# The geometry is pre-positioned: keycap bottom at Z=0, switch top at Z=-switchOffset
+# =============================================================================
+# PRE-COMPUTE LEVEL 2 TRANSFORMS (key assembly)
+# =============================================================================
+
+# Keycap: bottom at Z=0 (no additional offset needed after centering)
+keycap_assembly = key_assembly_transform(0.0)
+
+# Switch: position so its TOP is at Z = -switchOffset
+# After centering, switch bottom is at Z=0, top at Z=switch_height
+# We want top at -switchOffset, so translate by -(switch_height + switchOffset)
+switch_assembly = key_assembly_transform(-(switch_height + switchOffset))
+
+print(f"Assembly: keycap at Z=0, switch top at Z={-switchOffset}mm")
+
+# =============================================================================
+# CREATE BASE GEOMETRY OBJECTS
+# =============================================================================
+
+# Apply assembly transform to switch geometry (bake it in)
+switch_solid = switch_solid.translated(FreeCAD.Vector(
+    switch_assembly[0, 3],
+    switch_assembly[1, 3],
+    switch_assembly[2, 3]
+))
+
 keycap_base = doc.addObject("Part::Feature", "Keycap_Base")
 keycap_base.Shape = keycap_solid
 
 switch_base = doc.addObject("Part::Feature", "Switch_Base")
 switch_base.Shape = switch_solid
 
-# Create instances with pitch and ring arrangement
-# Each instance references the same base shape - backend will detect via shape hash
+# =============================================================================
+# CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
+# =============================================================================
+
+# Calculate angular span and center it
+totalAngle = (keyCount - 1) * angleBetweenKeys
+startAngle = -totalAngle / 2
+
 print(f"Creating {keyCount} keycap and switch instances...")
+print("Transform hierarchy: orientation (pitch) -> row position (roll)")
+
 for i in range(keyCount):
-    # Calculate roll angle for this key (position on the ring)
-    rollAngle = startAngle + i * angleBetweenKeys  # angle from bottom of ring
+    roll_rad = startAngle + i * angleBetweenKeys
 
-    # Calculate Y and Z position on the ring
-    # Angle measured from -Z direction (bottom of ring), positive = counterclockwise from +X view
-    # At rollAngle=0, key is at the bottom (Y=0, Z=0 relative to ring center)
-    y_pos = ringRadius * math.sin(rollAngle)
-    z_pos = ringAxisZ - ringRadius * math.cos(rollAngle)
+    # Level 3: Key orientation (pitch)
+    orientation = key_orientation_transform(pitch)
 
-    # Create rotation to orient key tangent to ring, then pitch backward
-    # Roll: rotation around X axis to orient key tangent to ring surface
-    # Pitch: rotation around Y axis (top of key tilts away from ring center)
-    # Order: roll first (tangent to ring), then pitch (tilt back)
-    rollRotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), math.degrees(rollAngle))
-    pitchRotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch)
-    # A.multiply(B) returns A*B, which applies B first then A
-    # We want: pitch first (tilt back), then roll (position on ring)
-    # So: roll * pitch = rollRotation.multiply(pitchRotation)
-    combinedRotation = rollRotation.multiply(pitchRotation)
+    # Level 4: Row position (roll on ring)
+    row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
 
-    # Ring position in world coordinates
-    ring_position = FreeCAD.Vector(0, y_pos, z_pos)
+    # Compose transforms: orientation first, then row position
+    # (Levels 1 and 2 are already baked into the geometry)
+    final_transform = compose_transforms(orientation, row_pos)
+
+    # Convert to FreeCAD Placement
+    placement = matrix_to_placement(final_transform)
 
     if i == 0:
-        # First instance - rename and use the base objects
+        # First instance - use the base objects
         keycap_base.Label = "Keycap_1"
         switch_base.Label = "Switch_1"
         keycap_obj = keycap_base
         switch_obj = switch_base
     else:
-        # Additional instances - create new objects referencing the same shape
+        # Additional instances
         keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
         keycap_obj.Shape = keycap_base.Shape
 
         switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
         switch_obj.Shape = switch_base.Shape
 
-    # Apply Placement: rotation around origin (geometry pre-positioned for stacking)
-    keycap_obj.Placement = FreeCAD.Placement(ring_position, combinedRotation)
-    switch_obj.Placement = FreeCAD.Placement(ring_position, combinedRotation)
+    # Apply the same placement to both keycap and switch
+    keycap_obj.Placement = placement
+    switch_obj.Placement = placement
 
-    rollDeg = math.degrees(rollAngle)
-    print(f"✓ Key {i+1} at roll={rollDeg:.1f}°, y={y_pos:.1f}mm, z={z_pos:.1f}mm")
+    # Extract position for logging
+    pos = final_transform[:3, 3]
+    roll_deg = math.degrees(roll_rad)
+    print(f"Key {i+1}: roll={roll_deg:+6.1f} deg, pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})")
 
-# Add visible ring to show the hand rest cylinder
-# Ring is a cylinder with axis along Y, centered at Z=ringAxisZ
-ringLength = 200  # mm (extend along Y axis)
-ringThickness = 2  # mm wall thickness
+# =============================================================================
+# ADD VISUAL RING (hand rest cylinder)
+# =============================================================================
 
-# Create outer and inner cylinders for hollow ring
+ringLength = 200  # mm
+ringThickness = 2  # mm
+
 outerCylinder = Part.makeCylinder(
     ringRadius,
     ringLength,
-    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),  # Start at -Y/2
-    FreeCAD.Vector(0, 1, 0)  # Axis along Y
+    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+    FreeCAD.Vector(0, 1, 0)
 )
 innerCylinder = Part.makeCylinder(
     ringRadius - ringThickness,
@@ -216,11 +401,14 @@ ringShape = outerCylinder.cut(innerCylinder)
 
 ring_obj = doc.addObject("Part::Feature", "HandRing")
 ring_obj.Shape = ringShape
-print(f"✓ Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
+print(f"Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
 
-# Recompute
+# =============================================================================
+# FINALIZE
+# =============================================================================
+
 doc.recompute()
-print("✓ Document recomputed")
+print("Document recomputed")
 
-print(f"✓ Keyboard generated successfully with {len(doc.Objects)} object(s)")
+print(f"Keyboard generated successfully with {len(doc.Objects)} object(s)")
 print(f"SUCCESS: Keyboard model complete - {keyCount} keys + ring generated")
