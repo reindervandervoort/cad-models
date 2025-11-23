@@ -165,8 +165,10 @@ for i in range(keyCount):
     # Order: roll first (tangent to ring), then pitch (tilt back)
     rollRotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), math.degrees(rollAngle))
     pitchRotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch)
-    # multiply(B) means: apply self first, then B - so this is roll, then pitch
-    combinedRotation = pitchRotation.multiply(rollRotation)
+    # A.multiply(B) returns A*B, which applies B first then A
+    # We want: pitch first (tilt back), then roll (position on ring)
+    # So: roll * pitch = rollRotation.multiply(pitchRotation)
+    combinedRotation = rollRotation.multiply(pitchRotation)
 
     # Ring position in world coordinates
     ring_position = FreeCAD.Vector(0, y_pos, z_pos)
