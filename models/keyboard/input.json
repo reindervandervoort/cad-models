@@ -1,4 +1,5 @@
 {
+  "_comment": "Testing instancing fix - backend now uses 2 decimal precision",
   "u": 18,
   "keyHeight": 6,
   "keyCount": 10,
