@@ -190,9 +190,33 @@ for i in range(keyCount):
     rollDeg = math.degrees(rollAngle)
     print(f"✓ Key {i+1} at roll={rollDeg:.1f}°, y={y_pos:.1f}mm, z={z_pos:.1f}mm")
 
+# Add visible ring to show the hand rest cylinder
+# Ring is a cylinder with axis along Y, centered at Z=ringAxisZ
+ringLength = 200  # mm (extend along Y axis)
+ringThickness = 2  # mm wall thickness
+
+# Create outer and inner cylinders for hollow ring
+outerCylinder = Part.makeCylinder(
+    ringRadius,
+    ringLength,
+    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),  # Start at -Y/2
+    FreeCAD.Vector(0, 1, 0)  # Axis along Y
+)
+innerCylinder = Part.makeCylinder(
+    ringRadius - ringThickness,
+    ringLength,
+    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+    FreeCAD.Vector(0, 1, 0)
+)
+ringShape = outerCylinder.cut(innerCylinder)
+
+ring_obj = doc.addObject("Part::Feature", "HandRing")
+ring_obj.Shape = ringShape
+print(f"✓ Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
+
 # Recompute
 doc.recompute()
 print("✓ Document recomputed")
 
 print(f"✓ Keyboard generated successfully with {len(doc.Objects)} object(s)")
-print(f"SUCCESS: Keyboard model complete - {keyCount} keys generated")
+print(f"SUCCESS: Keyboard model complete - {keyCount} keys + ring generated")

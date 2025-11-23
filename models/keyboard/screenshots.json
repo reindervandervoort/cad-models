@@ -1,0 +1,32 @@
+{
+  "defaults": {
+    "orthographic": true,
+    "background": "1a0033",
+    "wireframe": false
+  },
+  "views": [
+    {
+      "name": "isometric",
+      "camera": { "position": [200, 150, 150], "target": [0, 0, 96] },
+      "zoom": 0.8
+    },
+    {
+      "name": "side",
+      "camera": { "position": [300, 0, 96], "target": [0, 0, 96] },
+      "zoom": 0.6,
+      "comment": "View from +X showing keys wrapping around ring"
+    },
+    {
+      "name": "front",
+      "camera": { "position": [0, -300, 96], "target": [0, 0, 96] },
+      "zoom": 0.6,
+      "comment": "View from -Y showing keys on ring"
+    },
+    {
+      "name": "top",
+      "camera": { "position": [0, 0, 300], "target": [0, 0, 96] },
+      "zoom": 0.5,
+      "comment": "Top-down view of ring layout"
+    }
+  ]
+}
