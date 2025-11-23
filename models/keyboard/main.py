@@ -159,12 +159,14 @@ for i in range(keyCount):
     y_pos = ringRadius * math.sin(rollAngle)
     z_pos = ringAxisZ - ringRadius * math.cos(rollAngle)
 
-    # Create rotation combining pitch and roll
-    # Pitch: rotation around Y axis (top tilts back)
-    # Roll: rotation around X axis (orient tangent to ring)
-    pitchRotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch)
+    # Create rotation to orient key tangent to ring, then pitch backward
+    # Roll: rotation around X axis to orient key tangent to ring surface
+    # Pitch: rotation around Y axis (top of key tilts away from ring center)
+    # Order: roll first (tangent to ring), then pitch (tilt back)
     rollRotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), math.degrees(rollAngle))
-    combinedRotation = rollRotation.multiply(pitchRotation)
+    pitchRotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch)
+    # multiply(B) means: apply self first, then B - so this is roll, then pitch
+    combinedRotation = pitchRotation.multiply(rollRotation)
 
     # Ring position in world coordinates
     ring_position = FreeCAD.Vector(0, y_pos, z_pos)
