@@ -155,8 +155,8 @@ jobs:
           echo "$STATUS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # Check for screenshots
-          SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' || echo "")
+          # Check for screenshots (convert to comma-separated for GH output)
+          SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' | tr '\n' ',' | sed 's/,$//' || echo "")
           echo "screenshots=$SCREENSHOTS" >> $GITHUB_OUTPUT
 
       - name: Generate summary
