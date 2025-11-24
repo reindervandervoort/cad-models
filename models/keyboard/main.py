@@ -287,7 +287,9 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
 switch_height = switch_bbox.ZMax - switch_bbox.ZMin
 keycap_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 
-# Level 1: Centering transforms (moves mesh center to origin)
+# Level 1: Centering transforms (moves mesh so XY centered, bottom at Z=0)
+# IMPORTANT: Both keycap and switch are centered at origin with bottom at Z=0
+# This ensures rotations affect them identically
 keycap_centering = mesh_centering_transform(
     (keycap_bbox.XMin, keycap_bbox.YMin, keycap_bbox.ZMin),
     (keycap_bbox.XMax, keycap_bbox.YMax, keycap_bbox.ZMax)
@@ -298,22 +300,20 @@ switch_centering = mesh_centering_transform(
     (switch_bbox.XMax, switch_bbox.YMax, switch_bbox.ZMax)
 )
 
-# Level 2: Assembly transforms (vertical stacking)
-# Keycap: bottom at Z=0 (no additional offset after centering)
-keycap_assembly = key_assembly_transform(0.0)
+# Level 2: Assembly transforms - APPLIED IN LOCAL SPACE (before world rotations)
+# Both parts start with bottom at Z=0 after centering
+# Keycap: stays at Z=0
+# Switch: moved down so its TOP is at Z=-switchOffset (below keycap bottom)
+#
+# NEW APPROACH: Apply assembly offset FIRST (in local/model space),
+# then all rotations happen around the KEYCAP's origin (Z=0)
+# This keeps switch attached to keycap through all rotations
 
-# Switch: position so its TOP is at Z = -switchOffset
-# After centering, switch bottom is at Z=0, top at Z=switch_height
-# We want top at -switchOffset, so translate by -(switch_height + switchOffset)
-switch_assembly = key_assembly_transform(-(switch_height + switchOffset))
+keycap_assembly = key_assembly_transform(0.0)  # Keycap bottom at Z=0
+switch_assembly = key_assembly_transform(-(switch_height + switchOffset))  # Switch below
 
-# Compose Level 1 + Level 2 for each part (these will be combined with per-instance transforms)
-keycap_base_transform = compose_transforms(keycap_centering, keycap_assembly)
-switch_base_transform = compose_transforms(switch_centering, switch_assembly)
-
-print(f"Keycap base transform: centering + assembly (bottom at Z=0)")
-print(f"Switch base transform: centering + assembly (top at Z={-switchOffset}mm)")
 print(f"Switch height: {switch_height:.2f}mm, Keycap height: {keycap_height:.2f}mm")
+print(f"Assembly: keycap Z=0, switch top at Z={-switchOffset}mm")
 
 # =============================================================================
 # CREATE BASE GEOMETRY OBJECTS (original geometry, NO baked transforms)
@@ -348,19 +348,46 @@ for i in range(keyCount):
     # Level 4: Row position (roll on ring)
     row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
 
-    # Compose ALL transforms for each part (inner to outer):
-    # centering -> assembly -> orientation -> row_position
+    # Compose ALL transforms for each part:
+    #
+    # For rigid body attachment, both parts must rotate identically, then
+    # the assembly offset is applied IN THE ROTATED FRAME.
+    #
+    # Strategy:
+    # 1. Both centered at origin (same point)
+    # 2. Both rotate with same orientation + row_pos
+    # 3. Switch gets additional offset in LOCAL Z (rotated frame)
+    #
+    # To apply offset in local frame after rotation:
+    # - Compute the combined rotation matrix
+    # - Rotate the offset vector [0, 0, -offset] by that rotation
+    # - Add as translation after everything else
+
+    # Combined rotation (pitch then roll)
+    combined_rotation = compose_transforms(orientation, row_pos)
+
+    # Keycap: centering + rotation (no offset needed)
     keycap_final = compose_transforms(
-        keycap_centering,      # Level 1: center STL at origin
-        keycap_assembly,       # Level 2: vertical position (bottom at Z=0)
-        orientation,           # Level 3: pitch rotation
-        row_pos                # Level 4: position on ring
+        keycap_centering,
+        combined_rotation
     )
+
+    # Switch: centering + rotation + LOCAL offset
+    # The local offset [0, 0, -(switch_height + switchOffset)] needs to be
+    # rotated by combined_rotation to get the world-space offset
+    local_offset = np.array([0, 0, -(switch_height + switchOffset), 1])
+    rotated_offset = combined_rotation @ local_offset
+
+    # Create translation matrix for the rotated offset
+    switch_local_offset = np.eye(4)
+    switch_local_offset[0, 3] = rotated_offset[0]
+    switch_local_offset[1, 3] = rotated_offset[1]
+    switch_local_offset[2, 3] = rotated_offset[2]
+
     switch_final = compose_transforms(
-        switch_centering,      # Level 1: center STL at origin
-        switch_assembly,       # Level 2: vertical position (below keycap)
-        orientation,           # Level 3: pitch rotation
-        row_pos                # Level 4: position on ring
+        switch_centering,
+        combined_rotation,
+        switch_local_offset  # Offset in rotated frame (now world coords)
     )
 
     # Convert to FreeCAD Placements
