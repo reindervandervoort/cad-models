@@ -265,9 +265,14 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
 
 # =============================================================================
-# PRE-COMPUTE LEVEL 1 TRANSFORMS (mesh centering)
+# PRE-COMPUTE TRANSFORMS (all applied via Placement, NOT baked into geometry)
 # =============================================================================
 
+# Get dimensions for transform calculations
+switch_height = switch_bbox.ZMax - switch_bbox.ZMin
+keycap_height = keycap_bbox.ZMax - keycap_bbox.ZMin
+
+# Level 1: Centering transforms (moves mesh center to origin)
 keycap_centering = mesh_centering_transform(
     (keycap_bbox.XMin, keycap_bbox.YMin, keycap_bbox.ZMin),
     (keycap_bbox.XMax, keycap_bbox.YMax, keycap_bbox.ZMax)
@@ -278,30 +283,8 @@ switch_centering = mesh_centering_transform(
     (switch_bbox.XMax, switch_bbox.YMax, switch_bbox.ZMax)
 )
 
-# Apply centering to the base shapes (this is baked into the geometry)
-keycap_solid = keycap_solid.translated(FreeCAD.Vector(
-    keycap_centering[0, 3],
-    keycap_centering[1, 3],
-    keycap_centering[2, 3]
-))
-
-switch_solid = switch_solid.translated(FreeCAD.Vector(
-    switch_centering[0, 3],
-    switch_centering[1, 3],
-    switch_centering[2, 3]
-))
-
-# Get switch height for assembly offset calculation
-switch_height = switch_bbox.ZMax - switch_bbox.ZMin
-
-print(f"Keycap centered: bottom at Z=0")
-print(f"Switch centered: bottom at Z=0, height={switch_height:.2f}mm")
-
-# =============================================================================
-# PRE-COMPUTE LEVEL 2 TRANSFORMS (key assembly)
-# =============================================================================
-
-# Keycap: bottom at Z=0 (no additional offset needed after centering)
+# Level 2: Assembly transforms (vertical stacking)
+# Keycap: bottom at Z=0 (no additional offset after centering)
 keycap_assembly = key_assembly_transform(0.0)
 
 # Switch: position so its TOP is at Z = -switchOffset
@@ -309,24 +292,23 @@ keycap_assembly = key_assembly_transform(0.0)
 # We want top at -switchOffset, so translate by -(switch_height + switchOffset)
 switch_assembly = key_assembly_transform(-(switch_height + switchOffset))
 
-print(f"Assembly: keycap at Z=0, switch top at Z={-switchOffset}mm")
+# Compose Level 1 + Level 2 for each part (these will be combined with per-instance transforms)
+keycap_base_transform = compose_transforms(keycap_centering, keycap_assembly)
+switch_base_transform = compose_transforms(switch_centering, switch_assembly)
+
+print(f"Keycap base transform: centering + assembly (bottom at Z=0)")
+print(f"Switch base transform: centering + assembly (top at Z={-switchOffset}mm)")
+print(f"Switch height: {switch_height:.2f}mm, Keycap height: {keycap_height:.2f}mm")
 
 # =============================================================================
-# CREATE BASE GEOMETRY OBJECTS
+# CREATE BASE GEOMETRY OBJECTS (original geometry, NO baked transforms)
 # =============================================================================
-
-# Apply assembly transform to switch geometry (bake it in)
-switch_solid = switch_solid.translated(FreeCAD.Vector(
-    switch_assembly[0, 3],
-    switch_assembly[1, 3],
-    switch_assembly[2, 3]
-))
 
 keycap_base = doc.addObject("Part::Feature", "Keycap_Base")
-keycap_base.Shape = keycap_solid
+keycap_base.Shape = keycap_solid  # Original, unmodified geometry
 
 switch_base = doc.addObject("Part::Feature", "Switch_Base")
-switch_base.Shape = switch_solid
+switch_base.Shape = switch_solid  # Original, unmodified geometry
 
 # =============================================================================
 # CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
@@ -337,7 +319,7 @@ totalAngle = (keyCount - 1) * angleBetweenKeys
 startAngle = -totalAngle / 2
 
 print(f"Creating {keyCount} keycap and switch instances...")
-print("DEBUG MODE: Testing with minimal transforms - only Y spacing, no rotation")
+print("DEBUG MODE: Testing with Placement-based transforms - only Y spacing, no rotation")
 
 for i in range(keyCount):
     roll_rad = startAngle + i * angleBetweenKeys
@@ -351,15 +333,18 @@ for i in range(keyCount):
 
     # Simple linear spacing for debugging (along Y axis)
     y_offset = i * (u + horizontalSpace)
-    debug_translation = np.eye(4)
-    debug_translation[1, 3] = y_offset  # Space keys along Y
+    instance_translation = np.eye(4)
+    instance_translation[1, 3] = y_offset  # Space keys along Y
 
-    # Compose transforms: identity orientation, then simple translation
-    # (Levels 1 and 2 are already baked into the geometry)
-    final_transform = compose_transforms(orientation, debug_translation)
+    # Compose ALL transforms for each part:
+    # keycap: base_transform (centering+assembly) -> orientation -> instance_translation
+    # switch: base_transform (centering+assembly) -> orientation -> instance_translation
+    keycap_final = compose_transforms(keycap_base_transform, orientation, instance_translation)
+    switch_final = compose_transforms(switch_base_transform, orientation, instance_translation)
 
-    # Convert to FreeCAD Placement
-    placement = matrix_to_placement(final_transform)
+    # Convert to FreeCAD Placements
+    keycap_placement = matrix_to_placement(keycap_final)
+    switch_placement = matrix_to_placement(switch_final)
 
     if i == 0:
         # First instance - use the base objects
@@ -375,14 +360,15 @@ for i in range(keyCount):
         switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
         switch_obj.Shape = switch_base.Shape
 
-    # Apply the same placement to both keycap and switch
-    keycap_obj.Placement = placement
-    switch_obj.Placement = placement
+    # Apply DIFFERENT placements to keycap and switch (includes their base transforms)
+    keycap_obj.Placement = keycap_placement
+    switch_obj.Placement = switch_placement
 
-    # Extract position for logging
-    pos = final_transform[:3, 3]
-    roll_deg = math.degrees(roll_rad)
-    print(f"Key {i+1}: roll={roll_deg:+6.1f} deg, pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})")
+    # Log positions
+    keycap_pos = keycap_final[:3, 3]
+    switch_pos = switch_final[:3, 3]
+    print(f"Key {i+1}: keycap at ({keycap_pos[0]:.1f}, {keycap_pos[1]:.1f}, {keycap_pos[2]:.1f}), "
+          f"switch at ({switch_pos[0]:.1f}, {switch_pos[1]:.1f}, {switch_pos[2]:.1f})")
 
 # =============================================================================
 # ADD VISUAL RING (hand rest cylinder) - DISABLED for debugging
