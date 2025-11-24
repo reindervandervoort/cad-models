@@ -318,57 +318,35 @@ switch_base.Shape = switch_solid  # Original, unmodified geometry
 totalAngle = (keyCount - 1) * angleBetweenKeys
 startAngle = -totalAngle / 2
 
-print(f"Creating {keyCount} keycap and switch instances...")
-print("DEBUG MODE: Testing with Placement-based transforms - only Y spacing, no rotation")
+# =============================================================================
+# ULTRA-SIMPLE DEBUG: Just ONE keycap and ONE switch with IDENTITY placement
+# =============================================================================
+print("ULTRA-SIMPLE DEBUG: Single keycap + switch with identity Placement")
 
-for i in range(keyCount):
-    roll_rad = startAngle + i * angleBetweenKeys
+# Create just one keycap and one switch with NO transforms at all
+keycap_base.Label = "Keycap_1"
+switch_base.Label = "Switch_1"
 
-    # Level 3: Key orientation (pitch) - DISABLED for debugging
-    # orientation = key_orientation_transform(pitch)
-    orientation = np.eye(4)  # Identity - no pitch
+# Identity placement - no translation, no rotation
+identity_placement = FreeCAD.Placement(
+    FreeCAD.Vector(0, 0, 0),
+    FreeCAD.Rotation(0, 0, 0, 1)  # Identity quaternion
+)
 
-    # Level 4: Row position (roll on ring) - DISABLED for debugging
-    # row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
+keycap_base.Placement = identity_placement
+switch_base.Placement = identity_placement
 
-    # Simple linear spacing for debugging (along Y axis)
-    y_offset = i * (u + horizontalSpace)
-    instance_translation = np.eye(4)
-    instance_translation[1, 3] = y_offset  # Space keys along Y
+print(f"Keycap_1: Placement = identity (0,0,0)")
+print(f"Switch_1: Placement = identity (0,0,0)")
+print(f"Both should render at their original STL positions")
 
-    # Compose ALL transforms for each part:
-    # keycap: base_transform (centering+assembly) -> orientation -> instance_translation
-    # switch: base_transform (centering+assembly) -> orientation -> instance_translation
-    keycap_final = compose_transforms(keycap_base_transform, orientation, instance_translation)
-    switch_final = compose_transforms(switch_base_transform, orientation, instance_translation)
-
-    # Convert to FreeCAD Placements
-    keycap_placement = matrix_to_placement(keycap_final)
-    switch_placement = matrix_to_placement(switch_final)
-
-    if i == 0:
-        # First instance - use the base objects
-        keycap_base.Label = "Keycap_1"
-        switch_base.Label = "Switch_1"
-        keycap_obj = keycap_base
-        switch_obj = switch_base
-    else:
-        # Additional instances
-        keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
-        keycap_obj.Shape = keycap_base.Shape
-
-        switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
-        switch_obj.Shape = switch_base.Shape
-
-    # Apply DIFFERENT placements to keycap and switch (includes their base transforms)
-    keycap_obj.Placement = keycap_placement
-    switch_obj.Placement = switch_placement
-
-    # Log positions
-    keycap_pos = keycap_final[:3, 3]
-    switch_pos = switch_final[:3, 3]
-    print(f"Key {i+1}: keycap at ({keycap_pos[0]:.1f}, {keycap_pos[1]:.1f}, {keycap_pos[2]:.1f}), "
-          f"switch at ({switch_pos[0]:.1f}, {switch_pos[1]:.1f}, {switch_pos[2]:.1f})")
+# Print where the STL geometry actually is
+print(f"Keycap STL center: X={keycap_bbox.XMin + (keycap_bbox.XMax-keycap_bbox.XMin)/2:.1f}, "
+      f"Y={keycap_bbox.YMin + (keycap_bbox.YMax-keycap_bbox.YMin)/2:.1f}, "
+      f"Z={keycap_bbox.ZMin + (keycap_bbox.ZMax-keycap_bbox.ZMin)/2:.1f}")
+print(f"Switch STL center: X={switch_bbox.XMin + (switch_bbox.XMax-switch_bbox.XMin)/2:.1f}, "
+      f"Y={switch_bbox.YMin + (switch_bbox.YMax-switch_bbox.YMin)/2:.1f}, "
+      f"Z={switch_bbox.ZMin + (switch_bbox.ZMax-switch_bbox.ZMin)/2:.1f}")
 
 # =============================================================================
 # ADD VISUAL RING (hand rest cylinder) - DISABLED for debugging
