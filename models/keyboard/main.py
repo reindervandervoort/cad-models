@@ -372,23 +372,24 @@ for i in range(keyCount):
         combined_rotation
     )
 
-    # Switch: centering + rotation + LOCAL offset
+    # Switch: same rotation as keycap, but with local offset applied
     # The local offset [0, 0, -(switch_height + switchOffset)] needs to be
-    # rotated by combined_rotation to get the world-space offset
+    # rotated and then ADDED to the keycap's position
+
     # Use w=0 to treat as DIRECTION VECTOR (rotation only, no translation)
     local_offset = np.array([0, 0, -(switch_height + switchOffset), 0])
     rotated_offset = combined_rotation @ local_offset
 
-    # Create translation matrix for the rotated offset
-    switch_local_offset = np.eye(4)
-    switch_local_offset[0, 3] = rotated_offset[0]
-    switch_local_offset[1, 3] = rotated_offset[1]
-    switch_local_offset[2, 3] = rotated_offset[2]
+    # Create a copy of combined_rotation and ADD the offset to its translation
+    switch_rotation_with_offset = combined_rotation.copy()
+    switch_rotation_with_offset[0, 3] += rotated_offset[0]
+    switch_rotation_with_offset[1, 3] += rotated_offset[1]
+    switch_rotation_with_offset[2, 3] += rotated_offset[2]
 
+    # Apply centering then the rotation with offset
     switch_final = compose_transforms(
         switch_centering,
-        combined_rotation,
-        switch_local_offset  # Offset in rotated frame (now world coords)
+        switch_rotation_with_offset
     )
 
     # Convert to FreeCAD Placements
