@@ -5,11 +5,26 @@ Creates a row of keycaps and switches from STL files
 Uses kailh_choc_low_profile_keycap.stl and kailhlowprofilev102.stl
 Backend provides 'doc' variable - we add objects to it
 
+IMPORTANT: Transform Handling
+=============================
+All transformations must be COLLAPSED into a single 4x4 matrix before being
+converted to a FreeCAD Placement. The backend exports each object's Placement
+to assembly.json, which the Three.js frontend then applies to the loaded STL.
+
+The STL geometry is NOT modified - all positioning is done via Placement.
+Each object (keycap, switch) gets its own Placement that includes ALL transforms
+from the hierarchy below, collapsed into one matrix.
+
 Transformation Hierarchy (inner to outer):
 1. mesh_centering_transform - Centers STL geometry (XY centered, bottom at Z=0)
 2. key_assembly_transform - Stacks keycap + switch with vertical gap
 3. key_orientation_transform - Tilts key backward (pitch around Y)
 4. row_position_transform - Positions key on ring arc (roll around X + translation)
+
+For each instance, we compute:
+  final_matrix = row_position @ orientation @ assembly @ centering
+
+Then convert final_matrix to FreeCAD.Placement for that object.
 """
 
 import FreeCAD
@@ -319,59 +334,89 @@ totalAngle = (keyCount - 1) * angleBetweenKeys
 startAngle = -totalAngle / 2
 
 # =============================================================================
-# ULTRA-SIMPLE DEBUG: Just ONE keycap and ONE switch with IDENTITY placement
+# CREATE KEY INSTANCES WITH FULL TRANSFORM HIERARCHY
 # =============================================================================
-print("ULTRA-SIMPLE DEBUG: Single keycap + switch with identity Placement")
+print(f"Creating {keyCount} keycap and switch instances...")
+print("All transforms collapsed into single Placement per object")
 
-# Create just one keycap and one switch with NO transforms at all
-keycap_base.Label = "Keycap_1"
-switch_base.Label = "Switch_1"
+for i in range(keyCount):
+    roll_rad = startAngle + i * angleBetweenKeys
 
-# Identity placement - no translation, no rotation
-identity_placement = FreeCAD.Placement(
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Rotation(0, 0, 0, 1)  # Identity quaternion
+    # Level 3: Key orientation (pitch)
+    orientation = key_orientation_transform(pitch)
+
+    # Level 4: Row position (roll on ring)
+    row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
+
+    # Compose ALL transforms for each part (inner to outer):
+    # centering -> assembly -> orientation -> row_position
+    keycap_final = compose_transforms(
+        keycap_centering,      # Level 1: center STL at origin
+        keycap_assembly,       # Level 2: vertical position (bottom at Z=0)
+        orientation,           # Level 3: pitch rotation
+        row_pos                # Level 4: position on ring
+    )
+    switch_final = compose_transforms(
+        switch_centering,      # Level 1: center STL at origin
+        switch_assembly,       # Level 2: vertical position (below keycap)
+        orientation,           # Level 3: pitch rotation
+        row_pos                # Level 4: position on ring
+    )
+
+    # Convert to FreeCAD Placements
+    keycap_placement = matrix_to_placement(keycap_final)
+    switch_placement = matrix_to_placement(switch_final)
+
+    if i == 0:
+        # First instance - use the base objects
+        keycap_base.Label = "Keycap_1"
+        switch_base.Label = "Switch_1"
+        keycap_obj = keycap_base
+        switch_obj = switch_base
+    else:
+        # Additional instances - new objects with same Shape
+        keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
+        keycap_obj.Shape = keycap_base.Shape
+
+        switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1}")
+        switch_obj.Shape = switch_base.Shape
+
+    # Apply the collapsed Placement to each object
+    keycap_obj.Placement = keycap_placement
+    switch_obj.Placement = switch_placement
+
+    # Log
+    roll_deg = math.degrees(roll_rad)
+    keycap_pos = keycap_final[:3, 3]
+    switch_pos = switch_final[:3, 3]
+    print(f"Key {i+1}: roll={roll_deg:+.1f}°, "
+          f"keycap=({keycap_pos[0]:.1f},{keycap_pos[1]:.1f},{keycap_pos[2]:.1f}), "
+          f"switch=({switch_pos[0]:.1f},{switch_pos[1]:.1f},{switch_pos[2]:.1f})")
+
+# =============================================================================
+# ADD VISUAL RING (hand rest cylinder)
+# =============================================================================
+
+ringLength = 200  # mm
+ringThickness = 2  # mm
+
+outerCylinder = Part.makeCylinder(
+    ringRadius,
+    ringLength,
+    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+    FreeCAD.Vector(0, 1, 0)
 )
+innerCylinder = Part.makeCylinder(
+    ringRadius - ringThickness,
+    ringLength,
+    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+    FreeCAD.Vector(0, 1, 0)
+)
+ringShape = outerCylinder.cut(innerCylinder)
 
-keycap_base.Placement = identity_placement
-switch_base.Placement = identity_placement
-
-print(f"Keycap_1: Placement = identity (0,0,0)")
-print(f"Switch_1: Placement = identity (0,0,0)")
-print(f"Both should render at their original STL positions")
-
-# Print where the STL geometry actually is
-print(f"Keycap STL center: X={keycap_bbox.XMin + (keycap_bbox.XMax-keycap_bbox.XMin)/2:.1f}, "
-      f"Y={keycap_bbox.YMin + (keycap_bbox.YMax-keycap_bbox.YMin)/2:.1f}, "
-      f"Z={keycap_bbox.ZMin + (keycap_bbox.ZMax-keycap_bbox.ZMin)/2:.1f}")
-print(f"Switch STL center: X={switch_bbox.XMin + (switch_bbox.XMax-switch_bbox.XMin)/2:.1f}, "
-      f"Y={switch_bbox.YMin + (switch_bbox.YMax-switch_bbox.YMin)/2:.1f}, "
-      f"Z={switch_bbox.ZMin + (switch_bbox.ZMax-switch_bbox.ZMin)/2:.1f}")
-
-# =============================================================================
-# ADD VISUAL RING (hand rest cylinder) - DISABLED for debugging
-# =============================================================================
-
-# ringLength = 200  # mm
-# ringThickness = 2  # mm
-#
-# outerCylinder = Part.makeCylinder(
-#     ringRadius,
-#     ringLength,
-#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-#     FreeCAD.Vector(0, 1, 0)
-# )
-# innerCylinder = Part.makeCylinder(
-#     ringRadius - ringThickness,
-#     ringLength,
-#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-#     FreeCAD.Vector(0, 1, 0)
-# )
-# ringShape = outerCylinder.cut(innerCylinder)
-#
-# ring_obj = doc.addObject("Part::Feature", "HandRing")
-# ring_obj.Shape = ringShape
-print("Hand ring DISABLED for debugging")
+ring_obj = doc.addObject("Part::Feature", "HandRing")
+ring_obj.Shape = ringShape
+print(f"Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
 
 # =============================================================================
 # FINALIZE
