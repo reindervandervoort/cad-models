@@ -369,21 +369,22 @@ for i in range(keyCount):
         combined_rotation
     )
 
-    # Switch transform: START from keycap's transform, then add offset in LOCAL Z
-    # The offset needs to be in the ROTATED frame
+    # Switch transform: Use SAME centering as keycap!
+    # This ensures both start from the exact same reference point
+    # Then add the offset in the rotated frame
 
     # Extract rotation matrix (without translation)
     rotation_only = np.eye(4)
     rotation_only[:3, :3] = combined_rotation[:3, :3]
 
-    # Rotate the local offset vector (0, 0, -switchOffset) by the rotation
+    # Rotate the local offset vector (0, 0, -(switch_height + switchOffset)) by the rotation
     local_offset = np.array([0, 0, -(switch_height + switchOffset), 0])  # w=0 for direction
     rotated_offset = rotation_only @ local_offset
 
-    # Switch transform = switch centering + combined rotation + rotated offset
-    # Apply offset by modifying the final position
+    # Switch transform = KEYCAP centering + combined rotation + rotated offset
+    # Using keycap centering ensures both objects start from the same reference point!
     switch_before_offset = compose_transforms(
-        switch_centering,
+        keycap_centering,  # Use KEYCAP centering, not switch centering!
         combined_rotation
     )
 
