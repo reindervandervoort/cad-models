@@ -394,29 +394,29 @@ for i in range(keyCount):
           f"switch=({switch_pos[0]:.1f},{switch_pos[1]:.1f},{switch_pos[2]:.1f})")
 
 # =============================================================================
-# ADD VISUAL RING (hand rest cylinder)
+# ADD VISUAL RING (hand rest cylinder) - DISABLED for visibility
 # =============================================================================
 
-ringLength = 200  # mm
-ringThickness = 2  # mm
-
-outerCylinder = Part.makeCylinder(
-    ringRadius,
-    ringLength,
-    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-    FreeCAD.Vector(0, 1, 0)
-)
-innerCylinder = Part.makeCylinder(
-    ringRadius - ringThickness,
-    ringLength,
-    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-    FreeCAD.Vector(0, 1, 0)
-)
-ringShape = outerCylinder.cut(innerCylinder)
-
-ring_obj = doc.addObject("Part::Feature", "HandRing")
-ring_obj.Shape = ringShape
-print(f"Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
+# ringLength = 200  # mm
+# ringThickness = 2  # mm
+#
+# outerCylinder = Part.makeCylinder(
+#     ringRadius,
+#     ringLength,
+#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+#     FreeCAD.Vector(0, 1, 0)
+# )
+# innerCylinder = Part.makeCylinder(
+#     ringRadius - ringThickness,
+#     ringLength,
+#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+#     FreeCAD.Vector(0, 1, 0)
+# )
+# ringShape = outerCylinder.cut(innerCylinder)
+#
+# ring_obj = doc.addObject("Part::Feature", "HandRing")
+# ring_obj.Shape = ringShape
+print("Hand ring DISABLED for visibility")
 
 # =============================================================================
 # FINALIZE
