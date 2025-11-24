@@ -375,7 +375,8 @@ for i in range(keyCount):
     # Switch: centering + rotation + LOCAL offset
     # The local offset [0, 0, -(switch_height + switchOffset)] needs to be
     # rotated by combined_rotation to get the world-space offset
-    local_offset = np.array([0, 0, -(switch_height + switchOffset), 1])
+    # Use w=0 to treat as DIRECTION VECTOR (rotation only, no translation)
+    local_offset = np.array([0, 0, -(switch_height + switchOffset), 0])
     rotated_offset = combined_rotation @ local_offset
 
     # Create translation matrix for the rotated offset
