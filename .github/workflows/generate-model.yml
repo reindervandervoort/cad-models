@@ -14,7 +14,7 @@ on:
       version:
         description: 'Version number (semantic versioning)'
         required: true
-        default: '1.0.0'
+        default: '1.1.0'
 
 env:
   POLL_INTERVAL: 10  # seconds between status checks
@@ -46,7 +46,7 @@ jobs:
             else
               echo "model_name=demo" >> $GITHUB_OUTPUT
             fi
-            echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "version=1.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
             COMMIT_SUBJECT=$(echo "${{ github.event.head_commit.message }}" | head -1)
             echo "change_desc=$COMMIT_SUBJECT" >> $GITHUB_OUTPUT
           fi
