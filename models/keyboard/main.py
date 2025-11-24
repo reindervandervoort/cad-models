@@ -310,43 +310,12 @@ print(f"Assembly offset: switch positioned {switch_height + switchOffset:.2f}mm 
 keycap_base = doc.addObject("Part::Feature", "Keycap_Base")
 keycap_base.Shape = keycap_solid
 
-# Switch: translate geometry in LOCAL space to align with keycap coordinate system
-# Goal: After translation, both geometries share the same XY center and switch is positioned below keycap
-# This allows us to use IDENTICAL transforms for both objects
-
-# Calculate translation needed:
-# 1. Align XY centers
-delta_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2.0 - (switch_bbox.XMin + switch_bbox.XMax) / 2.0
-delta_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2.0 - (switch_bbox.YMin + switch_bbox.YMax) / 2.0
-
-# 2. Position switch top at (keycap bottom - gap)
-#    keycap bottom is at keycap_bbox.ZMin
-#    switch top is at switch_bbox.ZMax
-#    We want: switch_top_new = keycap_bottom - switchOffset
-delta_z = (keycap_bbox.ZMin - switchOffset) - switch_bbox.ZMax
-
-print(f"Translating switch geometry by ({delta_x:.2f}, {delta_y:.2f}, {delta_z:.2f})")
-print(f"  This aligns XY centers and positions switch {switchOffset:.2f}mm below keycap")
-
-switch_translated = switch_solid.translated(FreeCAD.Vector(delta_x, delta_y, delta_z))
-
+# Switch: use original geometry (no translation!)
 switch_base = doc.addObject("Part::Feature", "Switch_Base")
-switch_base.Shape = switch_translated
+switch_base.Shape = switch_solid
 
-# Verify alignment and compute COMMON centering transform
-switch_translated_bbox = switch_translated.BoundBox
-print(f"After translation:")
-print(f"  Keycap center: ({(keycap_bbox.XMin + keycap_bbox.XMax)/2:.2f}, {(keycap_bbox.YMin + keycap_bbox.YMax)/2:.2f})")
-print(f"  Switch center: ({(switch_translated_bbox.XMin + switch_translated_bbox.XMax)/2:.2f}, {(switch_translated_bbox.YMin + switch_translated_bbox.YMax)/2:.2f})")
-print(f"  Keycap bottom: {keycap_bbox.ZMin:.2f}, Switch top: {switch_translated_bbox.ZMax:.2f}")
-
-# IMPORTANT: Use keycap centering for BOTH objects
-# Since we translated the switch to align with the keycap, they should have the same center
-# But to be safe, verify the keycap_centering will work for both
-common_center_check_x = abs((keycap_bbox.XMin + keycap_bbox.XMax)/2 - (switch_translated_bbox.XMin + switch_translated_bbox.XMax)/2)
-common_center_check_y = abs((keycap_bbox.YMin + keycap_bbox.YMax)/2 - (switch_translated_bbox.YMin + switch_translated_bbox.YMax)/2)
-if common_center_check_x > 0.01 or common_center_check_y > 0.01:
-    print(f"  WARNING: Centers don't match! Delta X={common_center_check_x:.4f}, Y={common_center_check_y:.4f}")
+print(f"Assembly: keycap and switch with {switchOffset:.2f}mm gap")
+print(f"Will compute absolute world positions for each object")
 
 # =============================================================================
 # CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
@@ -389,17 +358,46 @@ for i in range(keyCount):
     # Combined rotation (pitch then roll)
     combined_rotation = compose_transforms(orientation, row_pos)
 
-    # Both keycap and switch use IDENTICAL transforms!
-    # The switch geometry was pre-translated to align with keycap coordinate system
-    # So we just apply the same centering + rotation to both
+    # Compute ABSOLUTE world positions for each object
 
+    # Keycap: Apply centering, orientation, and row position
     keycap_final = compose_transforms(
         keycap_centering,
         combined_rotation
     )
 
-    # Switch uses THE EXACT SAME transform as keycap!
-    switch_final = keycap_final.copy()
+    # Switch: Start with switch centering, then apply same rotation, then add offset
+    # The offset is in the KEYCAP's local frame, so we need to:
+    # 1. Apply switch centering
+    # 2. Apply combined rotation
+    # 3. Add offset in rotated frame
+
+    switch_centered_and_rotated = compose_transforms(
+        switch_centering,
+        combined_rotation
+    )
+
+    # Compute offset in world coordinates
+    # The offset is [0, 0, -(switch_height + switchOffset)] in keycap's local frame
+    # Extract just the rotation part
+    rotation_only = np.eye(4)
+    rotation_only[:3, :3] = combined_rotation[:3, :3]
+
+    # Rotate the offset vector (w=0 for direction, not point)
+    local_offset = np.array([0, 0, -(switch_height + switchOffset), 0])
+    rotated_offset = rotation_only @ local_offset
+
+    # Compute keycap's world position after all transforms
+    keycap_world_pos = keycap_final[:3, 3]
+
+    # Switch world position = keycap position + rotated offset
+    switch_world_pos = keycap_world_pos + rotated_offset[:3]
+
+    # Create switch transform with same rotation as keycap, but different position
+    switch_final = switch_centered_and_rotated.copy()
+    switch_final[0, 3] = switch_world_pos[0]
+    switch_final[1, 3] = switch_world_pos[1]
+    switch_final[2, 3] = switch_world_pos[2]
 
     # Convert to FreeCAD Placements
     keycap_placement = matrix_to_placement(keycap_final)
