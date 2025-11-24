@@ -287,17 +287,11 @@ print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
 switch_height = switch_bbox.ZMax - switch_bbox.ZMin
 keycap_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 
-# Level 1: Centering transforms (moves mesh so XY centered, bottom at Z=0)
-# IMPORTANT: Both keycap and switch are centered at origin with bottom at Z=0
-# This ensures rotations affect them identically
+# Level 1: Centering transforms
+# We'll compute this AFTER translating the switch, so both use a common reference point
 keycap_centering = mesh_centering_transform(
     (keycap_bbox.XMin, keycap_bbox.YMin, keycap_bbox.ZMin),
     (keycap_bbox.XMax, keycap_bbox.YMax, keycap_bbox.ZMax)
-)
-
-switch_centering = mesh_centering_transform(
-    (switch_bbox.XMin, switch_bbox.YMin, switch_bbox.ZMin),
-    (switch_bbox.XMax, switch_bbox.YMax, switch_bbox.ZMax)
 )
 
 # Level 2: Assembly offset in LOCAL space
@@ -339,12 +333,20 @@ switch_translated = switch_solid.translated(FreeCAD.Vector(delta_x, delta_y, del
 switch_base = doc.addObject("Part::Feature", "Switch_Base")
 switch_base.Shape = switch_translated
 
-# Verify alignment
+# Verify alignment and compute COMMON centering transform
 switch_translated_bbox = switch_translated.BoundBox
 print(f"After translation:")
 print(f"  Keycap center: ({(keycap_bbox.XMin + keycap_bbox.XMax)/2:.2f}, {(keycap_bbox.YMin + keycap_bbox.YMax)/2:.2f})")
 print(f"  Switch center: ({(switch_translated_bbox.XMin + switch_translated_bbox.XMax)/2:.2f}, {(switch_translated_bbox.YMin + switch_translated_bbox.YMax)/2:.2f})")
 print(f"  Keycap bottom: {keycap_bbox.ZMin:.2f}, Switch top: {switch_translated_bbox.ZMax:.2f}")
+
+# IMPORTANT: Use keycap centering for BOTH objects
+# Since we translated the switch to align with the keycap, they should have the same center
+# But to be safe, verify the keycap_centering will work for both
+common_center_check_x = abs((keycap_bbox.XMin + keycap_bbox.XMax)/2 - (switch_translated_bbox.XMin + switch_translated_bbox.XMax)/2)
+common_center_check_y = abs((keycap_bbox.YMin + keycap_bbox.YMax)/2 - (switch_translated_bbox.YMin + switch_translated_bbox.YMax)/2)
+if common_center_check_x > 0.01 or common_center_check_y > 0.01:
+    print(f"  WARNING: Centers don't match! Delta X={common_center_check_x:.4f}, Y={common_center_check_y:.4f}")
 
 # =============================================================================
 # CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
