@@ -337,13 +337,14 @@ totalAngle = (keyCount - 1) * angleBetweenKeys
 startAngle = -totalAngle / 2
 
 print(f"Creating {keyCount} keycap and switch instances...")
-print("Transform hierarchy: orientation (pitch) only - row position DISABLED for debugging")
+print("DEBUG MODE: Testing with minimal transforms - only Y spacing, no rotation")
 
 for i in range(keyCount):
     roll_rad = startAngle + i * angleBetweenKeys
 
-    # Level 3: Key orientation (pitch)
-    orientation = key_orientation_transform(pitch)
+    # Level 3: Key orientation (pitch) - DISABLED for debugging
+    # orientation = key_orientation_transform(pitch)
+    orientation = np.eye(4)  # Identity - no pitch
 
     # Level 4: Row position (roll on ring) - DISABLED for debugging
     # row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
@@ -353,7 +354,7 @@ for i in range(keyCount):
     debug_translation = np.eye(4)
     debug_translation[1, 3] = y_offset  # Space keys along Y
 
-    # Compose transforms: orientation first, then simple translation
+    # Compose transforms: identity orientation, then simple translation
     # (Levels 1 and 2 are already baked into the geometry)
     final_transform = compose_transforms(orientation, debug_translation)
 
