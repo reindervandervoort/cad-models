@@ -337,7 +337,7 @@ totalAngle = (keyCount - 1) * angleBetweenKeys
 startAngle = -totalAngle / 2
 
 print(f"Creating {keyCount} keycap and switch instances...")
-print("Transform hierarchy: orientation (pitch) -> row position (roll)")
+print("Transform hierarchy: orientation (pitch) only - row position DISABLED for debugging")
 
 for i in range(keyCount):
     roll_rad = startAngle + i * angleBetweenKeys
@@ -345,12 +345,17 @@ for i in range(keyCount):
     # Level 3: Key orientation (pitch)
     orientation = key_orientation_transform(pitch)
 
-    # Level 4: Row position (roll on ring)
-    row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
+    # Level 4: Row position (roll on ring) - DISABLED for debugging
+    # row_pos = row_position_transform(roll_rad, ringRadius, ringAxisZ)
 
-    # Compose transforms: orientation first, then row position
+    # Simple linear spacing for debugging (along Y axis)
+    y_offset = i * (u + horizontalSpace)
+    debug_translation = np.eye(4)
+    debug_translation[1, 3] = y_offset  # Space keys along Y
+
+    # Compose transforms: orientation first, then simple translation
     # (Levels 1 and 2 are already baked into the geometry)
-    final_transform = compose_transforms(orientation, row_pos)
+    final_transform = compose_transforms(orientation, debug_translation)
 
     # Convert to FreeCAD Placement
     placement = matrix_to_placement(final_transform)
@@ -379,29 +384,29 @@ for i in range(keyCount):
     print(f"Key {i+1}: roll={roll_deg:+6.1f} deg, pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})")
 
 # =============================================================================
-# ADD VISUAL RING (hand rest cylinder)
+# ADD VISUAL RING (hand rest cylinder) - DISABLED for debugging
 # =============================================================================
 
-ringLength = 200  # mm
-ringThickness = 2  # mm
-
-outerCylinder = Part.makeCylinder(
-    ringRadius,
-    ringLength,
-    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-    FreeCAD.Vector(0, 1, 0)
-)
-innerCylinder = Part.makeCylinder(
-    ringRadius - ringThickness,
-    ringLength,
-    FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
-    FreeCAD.Vector(0, 1, 0)
-)
-ringShape = outerCylinder.cut(innerCylinder)
-
-ring_obj = doc.addObject("Part::Feature", "HandRing")
-ring_obj.Shape = ringShape
-print(f"Added hand ring: radius={ringRadius}mm, axis at Z={ringAxisZ}mm")
+# ringLength = 200  # mm
+# ringThickness = 2  # mm
+#
+# outerCylinder = Part.makeCylinder(
+#     ringRadius,
+#     ringLength,
+#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+#     FreeCAD.Vector(0, 1, 0)
+# )
+# innerCylinder = Part.makeCylinder(
+#     ringRadius - ringThickness,
+#     ringLength,
+#     FreeCAD.Vector(0, -ringLength/2, ringAxisZ),
+#     FreeCAD.Vector(0, 1, 0)
+# )
+# ringShape = outerCylinder.cut(innerCylinder)
+#
+# ring_obj = doc.addObject("Part::Feature", "HandRing")
+# ring_obj.Shape = ringShape
+print("Hand ring DISABLED for debugging")
 
 # =============================================================================
 # FINALIZE
