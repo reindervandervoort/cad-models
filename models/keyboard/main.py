@@ -316,11 +316,35 @@ print(f"Assembly offset: switch positioned {switch_height + switchOffset:.2f}mm 
 keycap_base = doc.addObject("Part::Feature", "Keycap_Base")
 keycap_base.Shape = keycap_solid
 
-# Switch: use original geometry (NO translation!)
-switch_base = doc.addObject("Part::Feature", "Switch_Base")
-switch_base.Shape = switch_solid
+# Switch: translate geometry in LOCAL space to align with keycap coordinate system
+# Goal: After translation, both geometries share the same XY center and switch is positioned below keycap
+# This allows us to use IDENTICAL transforms for both objects
 
-print(f"Switch will be positioned {switchOffset:.2f}mm below keycap using transform offset")
+# Calculate translation needed:
+# 1. Align XY centers
+delta_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2.0 - (switch_bbox.XMin + switch_bbox.XMax) / 2.0
+delta_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2.0 - (switch_bbox.YMin + switch_bbox.YMax) / 2.0
+
+# 2. Position switch top at (keycap bottom - gap)
+#    keycap bottom is at keycap_bbox.ZMin
+#    switch top is at switch_bbox.ZMax
+#    We want: switch_top_new = keycap_bottom - switchOffset
+delta_z = (keycap_bbox.ZMin - switchOffset) - switch_bbox.ZMax
+
+print(f"Translating switch geometry by ({delta_x:.2f}, {delta_y:.2f}, {delta_z:.2f})")
+print(f"  This aligns XY centers and positions switch {switchOffset:.2f}mm below keycap")
+
+switch_translated = switch_solid.translated(FreeCAD.Vector(delta_x, delta_y, delta_z))
+
+switch_base = doc.addObject("Part::Feature", "Switch_Base")
+switch_base.Shape = switch_translated
+
+# Verify alignment
+switch_translated_bbox = switch_translated.BoundBox
+print(f"After translation:")
+print(f"  Keycap center: ({(keycap_bbox.XMin + keycap_bbox.XMax)/2:.2f}, {(keycap_bbox.YMin + keycap_bbox.YMax)/2:.2f})")
+print(f"  Switch center: ({(switch_translated_bbox.XMin + switch_translated_bbox.XMax)/2:.2f}, {(switch_translated_bbox.YMin + switch_translated_bbox.YMax)/2:.2f})")
+print(f"  Keycap bottom: {keycap_bbox.ZMin:.2f}, Switch top: {switch_translated_bbox.ZMax:.2f}")
 
 # =============================================================================
 # CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
@@ -363,35 +387,17 @@ for i in range(keyCount):
     # Combined rotation (pitch then roll)
     combined_rotation = compose_transforms(orientation, row_pos)
 
-    # Keycap transform: centering + rotation
+    # Both keycap and switch use IDENTICAL transforms!
+    # The switch geometry was pre-translated to align with keycap coordinate system
+    # So we just apply the same centering + rotation to both
+
     keycap_final = compose_transforms(
         keycap_centering,
         combined_rotation
     )
 
-    # Switch transform: Use SAME centering as keycap!
-    # This ensures both start from the exact same reference point
-    # Then add the offset in the rotated frame
-
-    # Extract rotation matrix (without translation)
-    rotation_only = np.eye(4)
-    rotation_only[:3, :3] = combined_rotation[:3, :3]
-
-    # Rotate the local offset vector (0, 0, -(switch_height + switchOffset)) by the rotation
-    local_offset = np.array([0, 0, -(switch_height + switchOffset), 0])  # w=0 for direction
-    rotated_offset = rotation_only @ local_offset
-
-    # Switch transform = KEYCAP centering + combined rotation + rotated offset
-    # Using keycap centering ensures both objects start from the same reference point!
-    switch_before_offset = compose_transforms(
-        keycap_centering,  # Use KEYCAP centering, not switch centering!
-        combined_rotation
-    )
-
-    switch_final = switch_before_offset.copy()
-    switch_final[0, 3] += rotated_offset[0]
-    switch_final[1, 3] += rotated_offset[1]
-    switch_final[2, 3] += rotated_offset[2]
+    # Switch uses THE EXACT SAME transform as keycap!
+    switch_final = keycap_final.copy()
 
     # Convert to FreeCAD Placements
     keycap_placement = matrix_to_placement(keycap_final)
