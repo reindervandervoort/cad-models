@@ -316,16 +316,27 @@ print(f"Assembly offset: switch positioned {switch_height + switchOffset:.2f}mm 
 keycap_base = doc.addObject("Part::Feature", "Keycap_Base")
 keycap_base.Shape = keycap_solid
 
-# Switch: translate geometry down by (switch_height + gap) in LOCAL space
-# This bakes the assembly offset into the geometry, so both parts can use
-# the same world transform (rotation + position)
-switch_offset_vector = FreeCAD.Vector(0, 0, -(switch_height + switchOffset))
+# Switch: We want switch TOP to align with keycap BOTTOM (at Z=0 after centering)
+# So translate switch geometry so its TOP is at Z = -switchOffset
+# The switch's centering will then put TOP at Z=0, with body extending downward
+switch_top_offset = -switchOffset  # Top of switch at -switchOffset (slightly below keycap bottom at 0)
+switch_offset_vector = FreeCAD.Vector(0, 0, switch_top_offset - (switch_bbox.ZMax - switch_bbox.ZMin))
 switch_offset_solid = switch_solid.translated(switch_offset_vector)
 
 switch_base = doc.addObject("Part::Feature", "Switch_Base")
 switch_base.Shape = switch_offset_solid
 
-print(f"Switch geometry offset by {switch_offset_vector} in local space")
+# For switch, use centering that puts TOP at Z=-switchOffset (gap below keycap)
+# This means: XY centered, TOP at Z=-switchOffset
+switch_offset_bbox = switch_offset_solid.BoundBox
+switch_offset_centering = np.eye(4)
+switch_offset_centering[0, 3] = -(switch_offset_bbox.XMin + switch_offset_bbox.XMax) / 2.0
+switch_offset_centering[1, 3] = -(switch_offset_bbox.YMin + switch_offset_bbox.YMax) / 2.0
+switch_offset_centering[2, 3] = -switch_offset_bbox.ZMax + (-switchOffset)  # Put TOP at Z=-switchOffset!
+
+print(f"Switch geometry offset: top will be {switchOffset:.2f}mm below keycap bottom")
+print(f"Switch offset bounds: Z({switch_offset_bbox.ZMin:.2f}, {switch_offset_bbox.ZMax:.2f})")
+print(f"After centering: switch top at Z={-switchOffset:.2f}, switch bottom at Z={-switchOffset + (switch_offset_bbox.ZMin - switch_offset_bbox.ZMax):.2f}")
 
 # =============================================================================
 # CREATE KEY INSTANCES WITH HIERARCHICAL TRANSFORMS
@@ -368,9 +379,9 @@ for i in range(keyCount):
     # Combined rotation (pitch then roll)
     combined_rotation = compose_transforms(orientation, row_pos)
 
-    # Both keycap and switch use THE SAME transform!
-    # The assembly offset is baked into the switch geometry
-    # Use keycap_centering for both since switch geometry is already offset
+    # Both keycap and switch use THE SAME rotation, but different centering
+    # Keycap: centered on original geometry
+    # Switch: centered on TRANSLATED geometry (offset is baked in)
 
     keycap_final = compose_transforms(
         keycap_centering,
@@ -378,8 +389,8 @@ for i in range(keyCount):
     )
 
     switch_final = compose_transforms(
-        keycap_centering,  # Use SAME centering as keycap!
-        combined_rotation   # Use SAME rotation as keycap!
+        switch_offset_centering,  # Use centering of translated geometry!
+        combined_rotation          # Same rotation as keycap
     )
 
     # Convert to FreeCAD Placements
