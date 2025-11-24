@@ -288,10 +288,15 @@ switch_height = switch_bbox.ZMax - switch_bbox.ZMin
 keycap_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 
 # Level 1: Centering transforms
-# We'll compute this AFTER translating the switch, so both use a common reference point
+# Each object uses its own centering (different bounding boxes)
 keycap_centering = mesh_centering_transform(
     (keycap_bbox.XMin, keycap_bbox.YMin, keycap_bbox.ZMin),
     (keycap_bbox.XMax, keycap_bbox.YMax, keycap_bbox.ZMax)
+)
+
+switch_centering = mesh_centering_transform(
+    (switch_bbox.XMin, switch_bbox.YMin, switch_bbox.ZMin),
+    (switch_bbox.XMax, switch_bbox.YMax, switch_bbox.ZMax)
 )
 
 # Level 2: Assembly offset in LOCAL space
