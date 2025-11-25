@@ -150,12 +150,16 @@ except Exception:
 keycap_bbox = keycap_solid.BoundBox
 switch_bbox = switch_solid.BoundBox
 
-print(f"Keycap bounds: X({keycap_bbox.XMin:.2f}, {keycap_bbox.XMax:.2f}), "
-      f"Y({keycap_bbox.YMin:.2f}, {keycap_bbox.YMax:.2f}), "
-      f"Z({keycap_bbox.ZMin:.2f}, {keycap_bbox.ZMax:.2f})")
-print(f"Switch bounds: X({switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}), "
-      f"Y({switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}), "
-      f"Z({switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f})")
+print(f"\n=== GEOMETRY ANALYSIS ===")
+print(f"Keycap STL bounds:")
+print(f"  X: [{keycap_bbox.XMin:.2f}, {keycap_bbox.XMax:.2f}] → center: {(keycap_bbox.XMin + keycap_bbox.XMax)/2:.2f}")
+print(f"  Y: [{keycap_bbox.YMin:.2f}, {keycap_bbox.YMax:.2f}] → center: {(keycap_bbox.YMin + keycap_bbox.YMax)/2:.2f}")
+print(f"  Z: [{keycap_bbox.ZMin:.2f}, {keycap_bbox.ZMax:.2f}] → height: {keycap_bbox.ZMax - keycap_bbox.ZMin:.2f}")
+print(f"\nSwitch STL bounds:")
+print(f"  X: [{switch_bbox.XMin:.2f}, {switch_bbox.XMax:.2f}] → center: {(switch_bbox.XMin + switch_bbox.XMax)/2:.2f}")
+print(f"  Y: [{switch_bbox.YMin:.2f}, {switch_bbox.YMax:.2f}] → center: {(switch_bbox.YMin + switch_bbox.YMax)/2:.2f}")
+print(f"  Z: [{switch_bbox.ZMin:.2f}, {switch_bbox.ZMax:.2f}] → height: {switch_bbox.ZMax - switch_bbox.ZMin:.2f}")
+print(f"=========================\n")
 
 # =============================================================================
 # COMPUTE TRANSFORMS FOR SINGLE KEYCAP + SWITCH PAIR
