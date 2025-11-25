@@ -195,11 +195,16 @@ pitch_matrix[:3, :3] = pitch_rotation.as_matrix()
 # Compose: first translate to center, then rotate around that center
 keycap_final = compose_transforms(center_translation, pitch_matrix)
 
+# Verify: apply transform to original top center point to see where it ends up
+top_center_point = np.array([keycap_center_x, keycap_center_y, keycap_top_z, 1.0])
+transformed_top_center = keycap_final @ top_center_point
+
 print(f"Keycap transform:")
 print(f"  Original top center: ({keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_top_z:.2f})")
 print(f"  Translation: move top to origin")
 print(f"  Rotation: 45° pitch around Y at origin")
-print(f"  Final transform translation: ({keycap_final[0,3]:.2f}, {keycap_final[1,3]:.2f}, {keycap_final[2,3]:.2f})")
+print(f"  Transformed top center position: ({transformed_top_center[0]:.2f}, {transformed_top_center[1]:.2f}, {transformed_top_center[2]:.2f})")
+print(f"  Final transform translation component: ({keycap_final[0,3]:.2f}, {keycap_final[1,3]:.2f}, {keycap_final[2,3]:.2f})")
 
 # SWITCH TRANSFORM
 # ----------------
