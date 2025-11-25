@@ -169,6 +169,13 @@ The backend captures isometric screenshots automatically using Playwright:
 - **Default view**: `screenshots/{model}/{version}/isometric.png`
 - **Custom views**: Configure via `screenshots.json` in your model folder
 
+**Reviewing Model Changes (Iteration Workflow):**
+- The backend automatically renders screenshots for each build
+- Use the Read tool with screenshot URLs to visually review positioning
+- First build after inactivity: ~90 seconds (cold start)
+- Subsequent builds: ~30 seconds (warm pool)
+- Iterate quickly by pushing changes and reviewing screenshots
+
 **Example `screenshots.json`:**
 ```json
 {
