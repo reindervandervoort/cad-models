@@ -206,7 +206,7 @@ keycap_final = compose_transforms(center_translation, pitch_matrix)
 top_center_original = np.array([keycap_center_x, keycap_center_y, keycap_top_z, 1.0])
 top_center_final = keycap_final @ top_center_original
 
-print(f"\n=== KEYCAP TRANSFORM ===")
+print(f"\n=== KEYCAP TRANSFORM VERIFICATION ===")
 print(f"Original top center point: ({keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_top_z:.2f})")
 print(f"After full transform: ({top_center_final[0]:.2f}, {top_center_final[1]:.2f}, {top_center_final[2]:.2f})")
 print(f"Expected: (0.00, 0.00, 0.00)")
@@ -214,7 +214,12 @@ if abs(top_center_final[0]) < 0.01 and abs(top_center_final[1]) < 0.01 and abs(t
     print(f"✓ Top center correctly at origin")
 else:
     print(f"✗ WARNING: Top center NOT at origin!")
-print(f"========================\n")
+
+# Also test where the bottom center ends up (for understanding geometry)
+bottom_center_original = np.array([keycap_center_x, keycap_center_y, keycap_bbox.ZMin, 1.0])
+bottom_center_final = keycap_final @ bottom_center_original
+print(f"\nBottom center after transform: ({bottom_center_final[0]:.2f}, {bottom_center_final[1]:.2f}, {bottom_center_final[2]:.2f})")
+print(f"======================================\n")
 
 # SWITCH TRANSFORM
 # ----------------
