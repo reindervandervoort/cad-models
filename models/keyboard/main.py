@@ -293,6 +293,16 @@ print("Created single keycap+switch pair with 45° pitch")
 print("Keycap top center should be at origin (0,0,0)")
 
 # =============================================================================
+# DEBUG: Add reference sphere at origin
+# =============================================================================
+
+# Add a small sphere at the origin as a reference point
+reference_sphere = Part.makeSphere(2.0, FreeCAD.Vector(0, 0, 0))
+sphere_obj = doc.addObject("Part::Feature", "OriginReference")
+sphere_obj.Shape = reference_sphere
+print("\n✓ Added 2mm radius reference sphere at origin (0,0,0) for debugging")
+
+# =============================================================================
 # FINALIZE
 # =============================================================================
 
