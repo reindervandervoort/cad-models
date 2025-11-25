@@ -271,12 +271,23 @@ print(f"  Final transform translation: ({switch_final[0,3]:.2f}, {switch_final[1
 # Create keycap object
 keycap_obj = doc.addObject("Part::Feature", "Keycap")
 keycap_obj.Shape = keycap_solid
-keycap_obj.Placement = matrix_to_placement(keycap_final)
+keycap_placement = matrix_to_placement(keycap_final)
+keycap_obj.Placement = keycap_placement
 
 # Create switch object
 switch_obj = doc.addObject("Part::Feature", "Switch")
 switch_obj.Shape = switch_solid
-switch_obj.Placement = matrix_to_placement(switch_final)
+switch_placement = matrix_to_placement(switch_final)
+switch_obj.Placement = switch_placement
+
+print("\n=== FINAL PLACEMENT VALUES ===")
+print(f"Keycap Placement:")
+print(f"  Base: {keycap_placement.Base}")
+print(f"  Rotation (axis, angle): {keycap_placement.Rotation.Axis}, {keycap_placement.Rotation.Angle:.2f}°")
+print(f"Switch Placement:")
+print(f"  Base: {switch_placement.Base}")
+print(f"  Rotation (axis, angle): {switch_placement.Rotation.Axis}, {switch_placement.Rotation.Angle:.2f}°")
+print(f"==============================\n")
 
 print("Created single keycap+switch pair with 45° pitch")
 print("Keycap top center should be at origin (0,0,0)")
