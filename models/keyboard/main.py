@@ -176,40 +176,45 @@ print(f"Keycap dimensions: W={keycap_bbox.XMax - keycap_bbox.XMin:.2f}, D={keyca
 # ----------------
 # Goal: top center of keycap at origin (0,0,0) with 45° pitch
 #
-# Strategy:
-# 1. Translate keycap so its top center is at origin
-# 2. Rotate 45° around Y axis (rotation happens at origin, so top center stays there)
+# Strategy (REVISED):
+# The keycap mesh geometry has its natural XY position. We want to:
+# 1. Center the keycap in XY (move to 0,0 in XY plane)
+# 2. Position the TOP at Z=0 (move top surface to origin Z)
+# 3. Rotate 45° around Y axis through the origin
 #
-# This way rotation happens around the point we care about (top center).
+# Transform composition: Translate → Rotate
 
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
 keycap_top_z = keycap_bbox.ZMax
 
-# Step 1: Translate so top center is at origin
+# Step 1: Translate so top center is at origin (0, 0, 0)
 center_translation = np.eye(4)
 center_translation[0, 3] = -keycap_center_x
 center_translation[1, 3] = -keycap_center_y
 center_translation[2, 3] = -keycap_top_z
 
-# Step 2: Rotate 45° around Y axis (at origin, where top center now is)
+# Step 2: Rotate 45° around Y axis at origin
 pitch_rotation = R.from_euler('Y', pitch, degrees=True)
 pitch_matrix = np.eye(4)
 pitch_matrix[:3, :3] = pitch_rotation.as_matrix()
 
-# Compose: first translate to center, then rotate around that center
+# Compose: translate first, then rotate
 keycap_final = compose_transforms(center_translation, pitch_matrix)
 
-# Verify: apply transform to original top center point to see where it ends up
-top_center_point = np.array([keycap_center_x, keycap_center_y, keycap_top_z, 1.0])
-transformed_top_center = keycap_final @ top_center_point
+# Verify where the top center ends up
+top_center_original = np.array([keycap_center_x, keycap_center_y, keycap_top_z, 1.0])
+top_center_final = keycap_final @ top_center_original
 
-print(f"Keycap transform:")
-print(f"  Original top center: ({keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_top_z:.2f})")
-print(f"  Translation: move top to origin")
-print(f"  Rotation: 45° pitch around Y at origin")
-print(f"  Transformed top center position: ({transformed_top_center[0]:.2f}, {transformed_top_center[1]:.2f}, {transformed_top_center[2]:.2f})")
-print(f"  Final transform translation component: ({keycap_final[0,3]:.2f}, {keycap_final[1,3]:.2f}, {keycap_final[2,3]:.2f})")
+print(f"\n=== KEYCAP TRANSFORM ===")
+print(f"Original top center point: ({keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_top_z:.2f})")
+print(f"After full transform: ({top_center_final[0]:.2f}, {top_center_final[1]:.2f}, {top_center_final[2]:.2f})")
+print(f"Expected: (0.00, 0.00, 0.00)")
+if abs(top_center_final[0]) < 0.01 and abs(top_center_final[1]) < 0.01 and abs(top_center_final[2]) < 0.01:
+    print(f"✓ Top center correctly at origin")
+else:
+    print(f"✗ WARNING: Top center NOT at origin!")
+print(f"========================\n")
 
 # SWITCH TRANSFORM
 # ----------------
