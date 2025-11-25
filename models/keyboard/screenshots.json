@@ -7,26 +7,27 @@
   "views": [
     {
       "name": "isometric",
-      "camera": { "position": [200, 150, 150], "target": [0, 0, 96] },
-      "zoom": 0.8
+      "camera": { "position": [50, 50, 50], "target": [0, 0, 0] },
+      "zoom": 2.0,
+      "comment": "Isometric view centered on origin where keycap top should be"
     },
     {
       "name": "side",
-      "camera": { "position": [300, 0, 96], "target": [0, 0, 96] },
-      "zoom": 0.6,
-      "comment": "View from +X showing keys wrapping around ring"
+      "camera": { "position": [80, 0, 0], "target": [0, 0, 0] },
+      "zoom": 2.5,
+      "comment": "Side view from +X showing pitch rotation"
     },
     {
       "name": "front",
-      "camera": { "position": [0, -300, 96], "target": [0, 0, 96] },
-      "zoom": 0.6,
-      "comment": "View from -Y showing keys on ring"
+      "camera": { "position": [0, -80, 0], "target": [0, 0, 0] },
+      "zoom": 2.5,
+      "comment": "Front view from -Y"
     },
     {
       "name": "top",
-      "camera": { "position": [0, 0, 300], "target": [0, 0, 96] },
-      "zoom": 0.5,
-      "comment": "Top-down view of ring layout"
+      "camera": { "position": [0, 0, 100], "target": [0, 0, 0] },
+      "zoom": 2.0,
+      "comment": "Top-down view - should see keycap top surface at origin"
     }
   ]
 }
