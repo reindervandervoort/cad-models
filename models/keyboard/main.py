@@ -4,6 +4,11 @@ Keyboard Model - SIMPLIFIED TEST CASE
 Single keycap + switch pair at 45° pitch
 Top center of keycap positioned at origin (0,0,0)
 
+Iteration workflow:
+- View screenshots at: https://github.com/reindervandervoort/cad-models/actions
+- Version format: 1.1.{run_number}
+- Screenshots updated to focus on origin with proper zoom
+
 IMPORTANT: Transform Handling
 =============================
 All transformations must be COLLAPSED into a single 4x4 matrix before being
