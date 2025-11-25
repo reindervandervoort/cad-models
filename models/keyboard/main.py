@@ -309,5 +309,13 @@ print("\n✓ Added 2mm radius reference sphere at origin (0,0,0) for debugging")
 doc.recompute()
 print("Document recomputed")
 
+print(f"\n=== FINAL VALIDATION ===")
+print(f"Total objects in document: {len(doc.Objects)}")
+for obj in doc.Objects:
+    print(f"  - {obj.Label}: Shape valid={obj.Shape.isValid()}, Vertices={len(obj.Shape.Vertexes)}, Faces={len(obj.Shape.Faces)}")
+    if hasattr(obj, 'Placement'):
+        print(f"    Placement Base: {obj.Placement.Base}")
+print(f"========================\n")
+
 print(f"Model generated successfully with {len(doc.Objects)} object(s)")
 print("SUCCESS: Model generation complete")
