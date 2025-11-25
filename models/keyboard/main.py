@@ -166,6 +166,7 @@ switch_height = switch_bbox.ZMax - switch_bbox.ZMin
 keycap_height = keycap_bbox.ZMax - keycap_bbox.ZMin
 
 print(f"Keycap height: {keycap_height:.2f}mm, Switch height: {switch_height:.2f}mm")
+print(f"Keycap dimensions: W={keycap_bbox.XMax - keycap_bbox.XMin:.2f}, D={keycap_bbox.YMax - keycap_bbox.YMin:.2f}, H={keycap_height:.2f}")
 
 # KEYCAP TRANSFORM
 # ----------------
