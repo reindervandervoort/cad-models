@@ -170,11 +170,23 @@ The backend captures isometric screenshots automatically using Playwright:
 - **Custom views**: Configure via `screenshots.json` in your model folder
 
 **Reviewing Model Changes (Iteration Workflow):**
-- The backend automatically renders screenshots for each build
-- Use the Read tool with screenshot URLs to visually review positioning
+- The backend automatically renders screenshots for each build using Playwright
+- Screenshots appear in the GitHub Actions job summary at:
+  `https://github.com/{user}/{repo}/actions/runs/{run_id}`
+- Version format: `1.1.{github.run_number}` (e.g., v1.1.100)
 - First build after inactivity: ~90 seconds (cold start)
 - Subsequent builds: ~30 seconds (warm pool)
-- Iterate quickly by pushing changes and reviewing screenshots
+- Iterate quickly by:
+  1. Push changes to main (must modify `models/**/*.py` to trigger)
+  2. Wait ~30 seconds for warm pool build
+  3. Check GitHub Actions for screenshots in job summary
+  4. Review positioning and make next iteration
+
+**Accessing Screenshots:**
+- GitHub Actions UI: View job summary for embedded screenshots
+- Direct URL (may require auth): `https://d2j2tqi3nk8zjp.cloudfront.net/screenshots/{model}/{version}/{view}.png`
+- Viewer credentials (Cognito): Use provided credentials for web viewer
+- GitHub access: SSH keys for repository access
 
 **Example `screenshots.json`:**
 ```json
