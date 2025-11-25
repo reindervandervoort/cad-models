@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Keyboard Model - MINIMAL TEST
-Testing if basic geometry export works at all
+Keyboard Model - Test keycap STL at its natural position
+No transforms applied - just load and display the STL as-is
 """
 
 import FreeCAD
 import Part
+import Mesh
+import os
 
-print("=== MINIMAL TEST: Simple box at origin ===")
+print("=== TEST: Keycap STL with no transforms ===")
 
 # If running standalone (not from backend), create doc
 if 'doc' not in dir():
@@ -16,18 +18,28 @@ if 'doc' not in dir():
 else:
     print("Using provided document (backend mode)")
 
-# Create a simple 10mm cube at the origin
-box = Part.makeBox(10, 10, 10, FreeCAD.Vector(-5, -5, -5))
-box_obj = doc.addObject("Part::Feature", "TestBox")
-box_obj.Shape = box
+# Load keycap STL
+script_dir = os.path.dirname(os.path.abspath(__file__))
+keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 
-print(f"Created box: {box_obj.Label}")
-print(f"  Shape valid: {box_obj.Shape.isValid()}")
-print(f"  BoundBox: X[{box_obj.Shape.BoundBox.XMin:.1f}, {box_obj.Shape.BoundBox.XMax:.1f}], "
-      f"Y[{box_obj.Shape.BoundBox.YMin:.1f}, {box_obj.Shape.BoundBox.YMax:.1f}], "
-      f"Z[{box_obj.Shape.BoundBox.ZMin:.1f}, {box_obj.Shape.BoundBox.ZMax:.1f}]")
-print(f"  Placement: {box_obj.Placement}")
+print(f"Loading: {keycap_stl}")
+keycap_mesh = Mesh.Mesh(keycap_stl)
+keycap_shape = Part.Shape()
+keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
+
+# Create object with NO transforms
+keycap_obj = doc.addObject("Part::Feature", "Keycap")
+keycap_obj.Shape = keycap_shape
+
+bbox = keycap_shape.BoundBox
+print(f"\nKeycap bounding box:")
+print(f"  X: [{bbox.XMin:.2f}, {bbox.XMax:.2f}] - width: {bbox.XLength:.2f}mm")
+print(f"  Y: [{bbox.YMin:.2f}, {bbox.YMax:.2f}] - depth: {bbox.YLength:.2f}mm")
+print(f"  Z: [{bbox.ZMin:.2f}, {bbox.ZMax:.2f}] - height: {bbox.ZLength:.2f}mm")
+print(f"  Center: ({(bbox.XMin+bbox.XMax)/2:.2f}, {(bbox.YMin+bbox.YMax)/2:.2f}, {(bbox.ZMin+bbox.ZMax)/2:.2f})")
+print(f"\nPlacement: {keycap_obj.Placement}")
+print(f"Shape valid: {keycap_obj.Shape.isValid()}")
+print(f"Vertices: {len(keycap_obj.Shape.Vertexes)}, Faces: {len(keycap_obj.Shape.Faces)}")
 
 doc.recompute()
-print(f"\nTotal objects: {len(doc.Objects)}")
-print("SUCCESS: Model generation complete")
+print(f"\nSUCCESS: Model generation complete with {len(doc.Objects)} object(s)")
