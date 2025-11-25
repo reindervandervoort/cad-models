@@ -171,93 +171,95 @@ print(f"Keycap height: {keycap_height:.2f}mm, Switch height: {switch_height:.2f}
 # ----------------
 # Goal: top center of keycap at origin (0,0,0) with 45° pitch
 #
+# Strategy:
+# We want the TOP CENTER of the keycap to be at origin after rotation.
+# The top center in the original mesh is at (center_x, center_y, top_z).
+#
 # Steps:
-# 1. Center in XY: translate by -center_x, -center_y
-# 2. Position TOP at Z=0: translate by -(ZMax)  [not -ZMin!]
-# 3. Rotate 45° around Y axis
+# 1. First rotate 45° around Y axis (rotation around origin in mesh space)
+# 2. Calculate where the top center ends up after rotation
+# 3. Translate to move that point to the origin
 
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
 keycap_top_z = keycap_bbox.ZMax
 
-# Translation to center XY and position top at Z=0
-keycap_translation = np.eye(4)
-keycap_translation[0, 3] = -keycap_center_x
-keycap_translation[1, 3] = -keycap_center_y
-keycap_translation[2, 3] = -keycap_top_z
+# The top center point in original mesh coordinates
+top_center_original = np.array([keycap_center_x, keycap_center_y, keycap_top_z, 1.0])
 
 # Rotation: 45° pitch around Y axis
 pitch_rotation = R.from_euler('Y', pitch, degrees=True)
 pitch_matrix = np.eye(4)
 pitch_matrix[:3, :3] = pitch_rotation.as_matrix()
 
-# Compose: first translate, then rotate
-keycap_final = compose_transforms(keycap_translation, pitch_matrix)
+# Apply rotation to find where top center ends up
+top_center_after_rotation = pitch_matrix @ top_center_original
+
+# Translation to move rotated top center to origin
+final_translation = np.eye(4)
+final_translation[0, 3] = -top_center_after_rotation[0]
+final_translation[1, 3] = -top_center_after_rotation[1]
+final_translation[2, 3] = -top_center_after_rotation[2]
+
+# Compose: first rotate, then translate
+keycap_final = compose_transforms(pitch_matrix, final_translation)
 
 print(f"Keycap transform:")
-print(f"  Center XY: ({keycap_center_x:.2f}, {keycap_center_y:.2f})")
-print(f"  Top Z: {keycap_top_z:.2f}mm")
-print(f"  Final position after transforms: ({keycap_final[0,3]:.2f}, {keycap_final[1,3]:.2f}, {keycap_final[2,3]:.2f})")
+print(f"  Original top center: ({keycap_center_x:.2f}, {keycap_center_y:.2f}, {keycap_top_z:.2f})")
+print(f"  After rotation: ({top_center_after_rotation[0]:.2f}, {top_center_after_rotation[1]:.2f}, {top_center_after_rotation[2]:.2f})")
+print(f"  Final translation: ({-top_center_after_rotation[0]:.2f}, {-top_center_after_rotation[1]:.2f}, {-top_center_after_rotation[2]:.2f})")
+print(f"  Final position: ({keycap_final[0,3]:.2f}, {keycap_final[1,3]:.2f}, {keycap_final[2,3]:.2f})")
 
 # SWITCH TRANSFORM
 # ----------------
 # Goal: positioned below keycap with same rotation
 #
 # Strategy:
-# 1. Center switch in XY, position bottom at Z=0
-# 2. Apply SAME rotation as keycap
-# 3. Apply offset in ROTATED local frame
-#    - The offset in local frame is [0, 0, -(keycap_height + switchOffset)]
-#    - We rotate this vector by the pitch rotation
-#    - Add it to keycap's world position
+# The switch should be positioned relative to the keycap in the keycap's LOCAL frame.
+# In local coords: switch top should be (switchOffset) mm below keycap bottom.
+#
+# Steps:
+# 1. In original mesh space, find where switch top center should be relative to keycap
+# 2. Rotate this point by the pitch rotation
+# 3. Translate so rotated point matches keycap's final position + local offset
 
 switch_center_x = (switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_center_y = (switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_bottom_z = switch_bbox.ZMin
+switch_top_z = switch_bbox.ZMax  # Use TOP of switch, not bottom
 
-# Translation to center switch
+# In the keycap's local frame (before rotation):
+# - Keycap bottom is at Z = keycap_bbox.ZMin
+# - Switch top should be switchOffset below that
+# So switch top in original mesh coords should align with:
+switch_target_z_original = keycap_bbox.ZMin - switchOffset
+
+# The target point for switch top center in original mesh coordinates
+# (aligned with keycap center in XY, positioned below keycap in Z)
+switch_top_center_original = np.array([keycap_center_x, keycap_center_y, switch_target_z_original, 1.0])
+
+# Apply rotation to find where this target point ends up
+switch_top_center_after_rotation = pitch_matrix @ switch_top_center_original
+
+# Now we want the switch's top center to be at that rotated position
+# The switch's actual top center in original mesh is at:
+switch_top_actual_original = np.array([switch_center_x, switch_center_y, switch_top_z, 1.0])
+
+# Apply rotation to switch's actual top center
+switch_top_actual_after_rotation = pitch_matrix @ switch_top_actual_original
+
+# Translation needed to move switch's rotated top center to target position
 switch_translation = np.eye(4)
-switch_translation[0, 3] = -switch_center_x
-switch_translation[1, 3] = -switch_center_y
-switch_translation[2, 3] = -switch_bottom_z
+switch_translation[0, 3] = switch_top_center_after_rotation[0] - switch_top_actual_after_rotation[0]
+switch_translation[1, 3] = switch_top_center_after_rotation[1] - switch_top_actual_after_rotation[1]
+switch_translation[2, 3] = switch_top_center_after_rotation[2] - switch_top_actual_after_rotation[2]
 
-# Apply same rotation as keycap
-switch_centered_rotated = compose_transforms(switch_translation, pitch_matrix)
-
-# Compute offset in rotated local frame
-# In keycap's local frame (BEFORE rotation), the switch should be at:
-# Z = -(keycap_height + switchOffset)
-#
-# After rotation, we need to:
-# 1. Create offset vector in local frame
-# 2. Rotate it by the pitch rotation
-# 3. Add to keycap's world position
-
-# Extract rotation matrix
-rotation_matrix = pitch_matrix[:3, :3]
-
-# Offset in local frame (downward in keycap's local Z)
-local_offset = np.array([0, 0, -(keycap_height + switchOffset)])
-
-# Rotate offset to world frame
-world_offset = rotation_matrix @ local_offset
-
-# Keycap's world position
-keycap_world_pos = keycap_final[:3, 3]
-
-# Switch world position
-switch_world_pos = keycap_world_pos + world_offset
-
-# Create final switch transform with same rotation, different position
-switch_final = switch_centered_rotated.copy()
-switch_final[0, 3] = switch_world_pos[0]
-switch_final[1, 3] = switch_world_pos[1]
-switch_final[2, 3] = switch_world_pos[2]
+# Compose: first rotate, then translate
+switch_final = compose_transforms(pitch_matrix, switch_translation)
 
 print(f"Switch transform:")
-print(f"  Center XY: ({switch_center_x:.2f}, {switch_center_y:.2f})")
-print(f"  Local offset: [0, 0, {-(keycap_height + switchOffset):.2f}]")
-print(f"  World offset: [{world_offset[0]:.2f}, {world_offset[1]:.2f}, {world_offset[2]:.2f}]")
+print(f"  Original switch top center: ({switch_center_x:.2f}, {switch_center_y:.2f}, {switch_top_z:.2f})")
+print(f"  Target position (keycap frame): Z = {switch_target_z_original:.2f}")
+print(f"  After rotation: ({switch_top_center_after_rotation[0]:.2f}, {switch_top_center_after_rotation[1]:.2f}, {switch_top_center_after_rotation[2]:.2f})")
 print(f"  Final position: ({switch_final[0,3]:.2f}, {switch_final[1,3]:.2f}, {switch_final[2,3]:.2f})")
 
 # =============================================================================
