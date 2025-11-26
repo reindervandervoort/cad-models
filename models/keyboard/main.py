@@ -10,7 +10,7 @@ The backend now properly separates raw geometry from Placement:
 - assembly.json contains Placement transforms
 - Frontend applies Placement to position geometry correctly
 
-Test deployment with backend fix (commit b79e737) that exports raw geometry.
+Final test: Fargate task using new task definition :18 with backend fix.
 """
 
 import FreeCAD
