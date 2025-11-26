@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Simple Keyboard Alignment
+Simple Keyboard Alignment - BAKED TRANSFORMS
 Aligns keycap and switch STL files:
 - Keycap: top center at origin (0, 0, 0)
 - Switch: centered at z = -0.75mm below origin
+
+IMPORTANT: Transforms are BAKED into the geometry, not set as Placement.
+The backend exports obj.Shape which includes any Placement transforms,
+causing double transformation. So we transform the geometry directly.
 """
 
 import FreeCAD
@@ -60,76 +64,67 @@ print(f"\n=== Original Bounding Boxes ===")
 print(f"Keycap: X({keycap_bbox.XMin:.2f} to {keycap_bbox.XMax:.2f}), "
       f"Y({keycap_bbox.YMin:.2f} to {keycap_bbox.YMax:.2f}), "
       f"Z({keycap_bbox.ZMin:.2f} to {keycap_bbox.ZMax:.2f})")
-print(f"  Width: {keycap_bbox.XMax - keycap_bbox.XMin:.2f}mm, "
-      f"Depth: {keycap_bbox.YMax - keycap_bbox.YMin:.2f}mm, "
-      f"Height: {keycap_bbox.ZMax - keycap_bbox.ZMin:.2f}mm")
 
 print(f"Switch: X({switch_bbox.XMin:.2f} to {switch_bbox.XMax:.2f}), "
       f"Y({switch_bbox.YMin:.2f} to {switch_bbox.YMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f} to {switch_bbox.ZMax:.2f})")
-print(f"  Width: {switch_bbox.XMax - switch_bbox.XMin:.2f}mm, "
-      f"Depth: {switch_bbox.YMax - switch_bbox.YMin:.2f}mm, "
-      f"Height: {switch_bbox.ZMax - switch_bbox.ZMin:.2f}mm")
 
 # =============================================================================
-# ALIGNMENT CALCULATIONS
+# TRANSFORM GEOMETRY DIRECTLY (BAKE TRANSFORMS)
 # =============================================================================
 
-print(f"\n=== Alignment Calculations ===")
+print(f"\n=== Baking Transforms into Geometry ===")
 
-# KEYCAP: Position so top center is at origin (0, 0, 0)
-# - Center X and Y
-# - Move top (ZMax) to Z=0
+# KEYCAP: Transform so top center is at origin (0, 0, 0)
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
 keycap_top_z = keycap_bbox.ZMax
 
-keycap_offset = FreeCAD.Vector(
+keycap_transform = FreeCAD.Vector(
     -keycap_center_x,  # Center X
     -keycap_center_y,  # Center Y
     -keycap_top_z       # Top at Z=0
 )
 
-print(f"Keycap offset: ({keycap_offset.x:.2f}, {keycap_offset.y:.2f}, {keycap_offset.z:.2f})")
+print(f"Keycap transform: ({keycap_transform.x:.2f}, {keycap_transform.y:.2f}, {keycap_transform.z:.2f})")
 
-# SWITCH: Position centered at z = -0.75mm
-# - Center X and Y
-# - Move center Z to -0.75mm
+# Apply transform to keycap geometry
+keycap_transformed = keycap_solid.copy()
+keycap_transformed.translate(keycap_transform)
+
+# SWITCH: Transform so center is at z = -0.75mm
 switch_center_x = (switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_center_y = (switch_bbox.YMin + switch_bbox.YMax) / 2
 switch_center_z = (switch_bbox.ZMin + switch_bbox.ZMax) / 2
+switch_target_z = -0.75
 
-switch_target_z = -0.75  # 0.75mm below origin
-
-switch_offset = FreeCAD.Vector(
-    -switch_center_x,           # Center X
-    -switch_center_y,           # Center Y
-    switch_target_z - switch_center_z  # Center at -0.75mm
+switch_transform = FreeCAD.Vector(
+    -switch_center_x,
+    -switch_center_y,
+    switch_target_z - switch_center_z
 )
 
-print(f"Switch offset: ({switch_offset.x:.2f}, {switch_offset.y:.2f}, {switch_offset.z:.2f})")
+print(f"Switch transform: ({switch_transform.x:.2f}, {switch_transform.y:.2f}, {switch_transform.z:.2f})")
+
+# Apply transform to switch geometry
+switch_transformed = switch_solid.copy()
+switch_transformed.translate(switch_transform)
 
 # =============================================================================
-# CREATE OBJECTS WITH PLACEMENTS
+# CREATE OBJECTS WITH TRANSFORMED GEOMETRY (NO PLACEMENT)
 # =============================================================================
 
-print(f"\n=== Creating Aligned Objects ===")
+print(f"\n=== Creating Objects (transforms baked into geometry) ===")
 
-# Create keycap object
+# Create keycap object with transformed geometry, NO Placement
 keycap_obj = doc.addObject("Part::Feature", "Keycap")
-keycap_obj.Shape = keycap_solid
-keycap_obj.Placement = FreeCAD.Placement(
-    keycap_offset,
-    FreeCAD.Rotation(0, 0, 0)
-)
+keycap_obj.Shape = keycap_transformed
+# Placement left at default (identity) - geometry already positioned
 
-# Create switch object
+# Create switch object with transformed geometry, NO Placement
 switch_obj = doc.addObject("Part::Feature", "Switch")
-switch_obj.Shape = switch_solid
-switch_obj.Placement = FreeCAD.Placement(
-    switch_offset,
-    FreeCAD.Rotation(0, 0, 0)
-)
+switch_obj.Shape = switch_transformed
+# Placement left at default (identity) - geometry already positioned
 
 doc.recompute()
 
@@ -139,7 +134,6 @@ doc.recompute()
 
 print(f"\n=== Verifying Alignment ===")
 
-# Get transformed bounding boxes
 keycap_final_bbox = keycap_obj.Shape.BoundBox
 switch_final_bbox = switch_obj.Shape.BoundBox
 
