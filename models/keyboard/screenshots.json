@@ -7,28 +7,27 @@
   "views": [
     {
       "name": "isometric",
-      "camera": { "position": [100, 100, 100], "target": [0, 0, 0] },
-      "zoom": 1.0,
-      "comment": "Wide isometric view to see if model is visible at all"
+      "camera": { "position": [40, 40, 40], "target": [0, 0, 0] },
+      "zoom": 2.0,
+      "comment": "Isometric view of keycap and switch alignment"
     },
     {
       "name": "side",
-      "camera": { "position": [150, 0, 0], "target": [0, 0, 0] },
-      "zoom": 1.0,
-      "comment": "Wide side view from +X showing pitch rotation"
+      "camera": { "position": [50, 0, 0], "target": [0, 0, 0] },
+      "zoom": 2.5,
+      "comment": "Side view showing vertical alignment"
     },
     {
-      "name": "wireframe",
-      "camera": { "position": [100, 100, 100], "target": [0, 0, 0] },
-      "zoom": 1.0,
-      "wireframe": true,
-      "comment": "Wireframe view for debugging geometry visibility"
+      "name": "front",
+      "camera": { "position": [0, -50, 0], "target": [0, 0, 0] },
+      "zoom": 2.5,
+      "comment": "Front view"
     },
     {
       "name": "top",
-      "camera": { "position": [0, 0, 200], "target": [0, 0, 0] },
-      "zoom": 0.8,
-      "comment": "Wide top-down view"
+      "camera": { "position": [0, 0, 50], "target": [0, 0, 0] },
+      "zoom": 2.5,
+      "comment": "Top-down view showing keycap at origin"
     }
   ]
 }
