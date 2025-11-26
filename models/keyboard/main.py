@@ -16,7 +16,7 @@ import Part
 import Mesh
 import os
 
-print("Starting fresh keyboard alignment...")
+print("Starting fresh keyboard alignment with backend fix...")
 
 # If running standalone (not from backend), create doc
 if 'doc' not in dir():
