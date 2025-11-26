@@ -9,6 +9,8 @@ The backend now properly separates raw geometry from Placement:
 - STL files contain original geometry (no transforms)
 - assembly.json contains Placement transforms
 - Frontend applies Placement to position geometry correctly
+
+Force redeploy to test updated backend Docker image.
 """
 
 import FreeCAD
