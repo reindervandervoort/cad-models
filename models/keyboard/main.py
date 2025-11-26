@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Simple Keyboard Alignment - BAKED TRANSFORMS
+Simple Keyboard Alignment
 Aligns keycap and switch STL files:
 - Keycap: top center at origin (0, 0, 0)
 - Switch: centered at z = -0.75mm below origin
 
-IMPORTANT: Transforms are BAKED into the geometry, not set as Placement.
-The backend exports obj.Shape which includes any Placement transforms,
-causing double transformation. So we transform the geometry directly.
+The backend now properly separates raw geometry from Placement:
+- STL files contain original geometry (no transforms)
+- assembly.json contains Placement transforms
+- Frontend applies Placement to position geometry correctly
 """
 
 import FreeCAD
@@ -70,61 +71,53 @@ print(f"Switch: X({switch_bbox.XMin:.2f} to {switch_bbox.XMax:.2f}), "
       f"Z({switch_bbox.ZMin:.2f} to {switch_bbox.ZMax:.2f})")
 
 # =============================================================================
-# TRANSFORM GEOMETRY DIRECTLY (BAKE TRANSFORMS)
+# ALIGNMENT CALCULATIONS
 # =============================================================================
 
-print(f"\n=== Baking Transforms into Geometry ===")
+print(f"\n=== Alignment Calculations ===")
 
-# KEYCAP: Transform so top center is at origin (0, 0, 0)
+# KEYCAP: Position so top center is at origin (0, 0, 0)
 keycap_center_x = (keycap_bbox.XMin + keycap_bbox.XMax) / 2
 keycap_center_y = (keycap_bbox.YMin + keycap_bbox.YMax) / 2
 keycap_top_z = keycap_bbox.ZMax
 
-keycap_transform = FreeCAD.Vector(
+keycap_offset = FreeCAD.Vector(
     -keycap_center_x,  # Center X
     -keycap_center_y,  # Center Y
     -keycap_top_z       # Top at Z=0
 )
 
-print(f"Keycap transform: ({keycap_transform.x:.2f}, {keycap_transform.y:.2f}, {keycap_transform.z:.2f})")
+print(f"Keycap offset: ({keycap_offset.x:.2f}, {keycap_offset.y:.2f}, {keycap_offset.z:.2f})")
 
-# Apply transform to keycap geometry
-keycap_transformed = keycap_solid.copy()
-keycap_transformed.translate(keycap_transform)
-
-# SWITCH: Transform so center is at z = -0.75mm
+# SWITCH: Position centered at z = -0.75mm
 switch_center_x = (switch_bbox.XMin + switch_bbox.XMax) / 2
 switch_center_y = (switch_bbox.YMin + switch_bbox.YMax) / 2
 switch_center_z = (switch_bbox.ZMin + switch_bbox.ZMax) / 2
 switch_target_z = -0.75
 
-switch_transform = FreeCAD.Vector(
-    -switch_center_x,
-    -switch_center_y,
-    switch_target_z - switch_center_z
+switch_offset = FreeCAD.Vector(
+    -switch_center_x,           # Center X
+    -switch_center_y,           # Center Y
+    switch_target_z - switch_center_z  # Center at -0.75mm
 )
 
-print(f"Switch transform: ({switch_transform.x:.2f}, {switch_transform.y:.2f}, {switch_transform.z:.2f})")
-
-# Apply transform to switch geometry
-switch_transformed = switch_solid.copy()
-switch_transformed.translate(switch_transform)
+print(f"Switch offset: ({switch_offset.x:.2f}, {switch_offset.y:.2f}, {switch_offset.z:.2f})")
 
 # =============================================================================
-# CREATE OBJECTS WITH TRANSFORMED GEOMETRY (NO PLACEMENT)
+# CREATE OBJECTS WITH PLACEMENTS
 # =============================================================================
 
-print(f"\n=== Creating Objects (transforms baked into geometry) ===")
+print(f"\n=== Creating Aligned Objects ===")
 
-# Create keycap object with transformed geometry, NO Placement
+# Create keycap object with Placement
 keycap_obj = doc.addObject("Part::Feature", "Keycap")
-keycap_obj.Shape = keycap_transformed
-# Placement left at default (identity) - geometry already positioned
+keycap_obj.Shape = keycap_solid
+keycap_obj.Placement = FreeCAD.Placement(keycap_offset, FreeCAD.Rotation(0, 0, 0))
 
-# Create switch object with transformed geometry, NO Placement
+# Create switch object with Placement
 switch_obj = doc.addObject("Part::Feature", "Switch")
-switch_obj.Shape = switch_transformed
-# Placement left at default (identity) - geometry already positioned
+switch_obj.Shape = switch_solid
+switch_obj.Placement = FreeCAD.Placement(switch_offset, FreeCAD.Rotation(0, 0, 0))
 
 doc.recompute()
 
