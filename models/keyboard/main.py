@@ -66,51 +66,39 @@ for i in range(key_count):
     row_offset_y = (i - (key_count - 1) / 2) * u
     print(f"  Row position: Y={row_offset_y:.1f}mm")
 
-    # Strategy for rotation around elevated axis:
-    # The keycap starts at origin (top at 0,0,0)
-    # We want to:
-    # 1. Move it to (0, row_offset_y, 0)
-    # 2. Apply pitch rotation around Y axis passing through that point
-    # 3. Apply roll rotation around X axis that's hand_radius ABOVE that point
-    #    i.e., around point (0, row_offset_y, hand_radius)
+    # Transform sequence using Placement.multiply():
+    # 1. Translate to row position: (0, row_offset_y, 0)
+    # 2. Apply pitch rotation around Y axis at that location
+    # 3. Translate down by hand_radius: (0, 0, -hand_radius)
+    # 4. Apply roll rotation around X axis (now at origin)
+    # 5. Translate back up by hand_radius: (0, 0, hand_radius)
 
-    # Step 1: Position in row
-    pos = FreeCAD.Vector(0, row_offset_y, 0)
+    # Start with identity
+    result = FreeCAD.Placement()
 
-    # Step 2: Pitch rotation (around Y axis at the keycap position)
-    pitch_rotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+    # Step 1: Translate to row position
+    t1 = FreeCAD.Placement(FreeCAD.Vector(0, row_offset_y, 0), FreeCAD.Rotation())
+    result = result.multiply(t1)
 
-    # Step 3: Roll rotation around elevated X axis
-    # To rotate around (0, row_offset_y, hand_radius):
-    # - Translate by (0, 0, -hand_radius) so rotation point is at (0, row_offset_y, 0)
-    # - Rotate around X axis
-    # - Translate by (0, 0, hand_radius) back up
+    # Step 2: Pitch rotation around Y axis (at current position)
+    pitch_rot = FreeCAD.Placement(FreeCAD.Vector(0, 0, 0), FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle))
+    result = result.multiply(pitch_rot)
 
-    roll_rotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle)
+    # Step 3: Translate down by hand_radius
+    t2 = FreeCAD.Placement(FreeCAD.Vector(0, 0, -hand_radius), FreeCAD.Rotation())
+    result = result.multiply(t2)
 
-    # Combine rotations: pitch first, then roll
-    combined_rotation = pitch_rotation.multiply(roll_rotation)
+    # Step 4: Roll rotation around X axis
+    roll_rot = FreeCAD.Placement(FreeCAD.Vector(0, 0, 0), FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle))
+    result = result.multiply(roll_rot)
 
-    # For roll around elevated axis, we need to offset the position
-    # When we rotate around X axis elevated by hand_radius,
-    # the Y position stays the same, but Z position changes
+    # Step 5: Translate back up by hand_radius
+    t3 = FreeCAD.Placement(FreeCAD.Vector(0, 0, hand_radius), FreeCAD.Rotation())
+    result = result.multiply(t3)
 
-    # Create placement: rotation at origin, then translate
-    # But we need to account for the offset caused by rotating around elevated axis
-    # The keycap top (at Z=0) rotates around axis at Z=hand_radius
-    # After rotation, the center needs adjustment
+    obj.Placement = result
 
-    placement = FreeCAD.Placement(pos, combined_rotation)
-
-    # Adjust for rotation around elevated axis:
-    # Move down by hand_radius before rotation conceptually happens
-    # This means we need to shift the final position
-    # After roll rotation, translate to account for the elevated rotation point
-    placement.Base = FreeCAD.Vector(0, row_offset_y, hand_radius * (1 - math.cos(math.radians(roll_angle))))
-
-    obj.Placement = placement
-
-    print(f"  Placement: Base={placement.Base}")
+    print(f"  Placement: Base=({result.Base.x:.1f}, {result.Base.y:.1f}, {result.Base.z:.1f})")
     print(f"  BBox: Y[{obj.Shape.BoundBox.YMin:.1f}, {obj.Shape.BoundBox.YMax:.1f}] Z[{obj.Shape.BoundBox.ZMin:.1f}, {obj.Shape.BoundBox.ZMax:.1f}]")
 
 doc.recompute()
