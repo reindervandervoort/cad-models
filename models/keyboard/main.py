@@ -74,11 +74,15 @@ for i in range(key_count):
     mesh = Mesh.Mesh(keycap_stl)
     print(f"  Loaded mesh: {len(mesh.Facets)} facets")
 
-    # Step 1: Center at origin (top at 0,0,0)
-    mesh.translate(base_offset_x, base_offset_y, base_offset_z)
-    print(f"  Step 1: Centered at origin")
+    # Calculate row position
+    row_offset_y = (i - (key_count - 1) / 2) * u
+    print(f"  Target row position: Y={row_offset_y:.1f}mm")
 
-    # Step 2: Pitch rotation around Y axis (at origin, which is top center)
+    # Step 1: Center at origin with row offset (BEFORE rotations)
+    mesh.translate(base_offset_x, base_offset_y + row_offset_y, base_offset_z)
+    print(f"  Step 1: Centered at origin with Y offset")
+
+    # Step 2: Pitch rotation around Y axis (at origin)
     pitch_matrix = Matrix()
     pitch_matrix.rotateY(math.radians(pitch_angle))
     mesh.transform(pitch_matrix)
@@ -97,17 +101,9 @@ for i in range(key_count):
     mesh.translate(0, 0, roll_axis_height)
     print(f"  Step 3: Rolled {roll_angle}° around elevated X axis (height={roll_axis_height}mm)")
 
-    # Step 4: Position in row along Y axis
-    row_offset_y = (i - (key_count - 1) / 2) * u
-
-    # IMPORTANT: After rotations, we need to check if the geometry actually moved
-    bbox_before = mesh.BoundBox
-    mesh.translate(0, row_offset_y, 0)
-    bbox_after = mesh.BoundBox
-
-    print(f"  Step 4: Translated by Y={row_offset_y:.1f}mm")
-    print(f"    Before: Y[{bbox_before.YMin:.1f}, {bbox_before.YMax:.1f}]")
-    print(f"    After:  Y[{bbox_after.YMin:.1f}, {bbox_after.YMax:.1f}]")
+    # Check final position
+    bbox_final = mesh.BoundBox
+    print(f"  Final bbox: X[{bbox_final.XMin:.1f},{bbox_final.XMax:.1f}] Y[{bbox_final.YMin:.1f},{bbox_final.YMax:.1f}] Z[{bbox_final.ZMin:.1f},{bbox_final.ZMax:.1f}]")
 
     # Convert to shape
     shape = Part.Shape()
