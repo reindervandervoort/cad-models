@@ -103,8 +103,15 @@ try:
 
     switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
 
+    # Convert to shape with looser tolerance to avoid degenerate geometry
     switch_shape = Part.Shape()
-    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
+    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.5)  # Increased from 0.1 to 0.5
+
+    # Simplify/fix the shape
+    if not switch_shape.isValid():
+        print("WARNING: Switch shape invalid, attempting to fix...")
+        switch_shape = switch_shape.removeSplitter()
+
     print(f"Switch shape created successfully")
 
 except Exception as e:
