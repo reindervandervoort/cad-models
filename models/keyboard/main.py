@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Keyboard Row: Multiple Keycaps with Roll
-Create a row of keycaps, each rotated with roll (around X axis).
-Roll axis is elevated by hand radius above keycap top.
+Keyboard Row: Keycaps with Pitch and Roll using Placement
+Use FreeCAD Placement for transformations so they export correctly to assembly.json
 """
 
 import FreeCAD
@@ -12,16 +11,15 @@ import os
 import math
 import json
 
-print("=== Keyboard row with roll rotation ===")
+print("=== Keyboard row with Placement transforms ===")
 
 # Document setup
 if 'doc' not in dir():
     doc = FreeCAD.newDocument("Keyboard")
-    print("Created new document (standalone mode)")
 else:
-    print("Using provided document (backend mode)")
+    print("Using backend mode")
 
-# Load parameters from input.json
+# Load parameters
 script_dir = os.path.dirname(os.path.abspath(__file__))
 input_file = os.path.join(script_dir, "input.json")
 with open(input_file, 'r') as f:
@@ -30,92 +28,74 @@ with open(input_file, 'r') as f:
 hand_diameter = params.get('handDiameter', 192)
 hand_radius = hand_diameter / 2
 key_count = params.get('keyCount', 5)
-u = params.get('u', 18)  # Unit size in mm
-pitch_angle = params.get('pitch', 45)  # Pitch in degrees
+u = params.get('u', 18)
+pitch_angle = params.get('pitch', 45)
 
-print(f"\nParameters:")
-print(f"  Hand diameter: {hand_diameter}mm (radius: {hand_radius}mm)")
-print(f"  Key count: {key_count}")
-print(f"  Unit spacing: {u}mm")
-print(f"  Pitch angle: {pitch_angle}°")
+print(f"\nParameters: keyCount={key_count}, u={u}mm, pitch={pitch_angle}°, hand_radius={hand_radius}mm")
 
-# Load keycap STL once to get dimensions
+# Load and prepare base keycap mesh (centered at origin with top at Z=0)
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
-print(f"\nLoading template: {keycap_stl}")
-template_mesh = Mesh.Mesh(keycap_stl)
+print(f"Loading: {keycap_stl}")
 
-# Get original bounding box
-bbox = template_mesh.BoundBox
-print(f"Original STL bbox: X[{bbox.XMin:.1f}, {bbox.XMax:.1f}] Y[{bbox.YMin:.1f}, {bbox.YMax:.1f}] Z[{bbox.ZMin:.1f}, {bbox.ZMax:.1f}]")
+base_mesh = Mesh.Mesh(keycap_stl)
+bbox = base_mesh.BoundBox
 
-# Calculate base offset to center keycap with top at origin
-base_offset_x = -(bbox.XMin + bbox.XMax) / 2
-base_offset_y = -(bbox.YMin + bbox.YMax) / 2
-base_offset_z = -bbox.ZMax
+# Center the base mesh
+offset_x = -(bbox.XMin + bbox.XMax) / 2
+offset_y = -(bbox.YMin + bbox.YMax) / 2
+offset_z = -bbox.ZMax
+base_mesh.translate(offset_x, offset_y, offset_z)
 
-print(f"Base offset: ({base_offset_x:.1f}, {base_offset_y:.1f}, {base_offset_z:.1f})")
+print(f"Base mesh centered at origin (top at Z=0)")
 
-# Configuration
+# Convert to base shape (will be reused)
+base_shape = Part.Shape()
+base_shape.makeShapeFromMesh(base_mesh.Topology, 0.1)
+
+# Create keycaps with Placement transforms
 roll_angle = 10  # degrees
-roll_axis_height = hand_radius  # mm above keycap top
-
-print(f"\nCreating {key_count} keycaps:")
-print(f"  Roll angle: {roll_angle}°")
-print(f"  Roll axis height: {roll_axis_height}mm")
-print(f"  Spacing: {u}mm")
-
-# Create each keycap
-from FreeCAD import Matrix
 
 for i in range(key_count):
     print(f"\n=== Keycap {i+1}/{key_count} ===")
 
-    # Load fresh mesh for this keycap
-    mesh = Mesh.Mesh(keycap_stl)
-    print(f"  Loaded mesh: {len(mesh.Facets)} facets")
+    # Create object with base shape
+    obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
+    obj.Shape = base_shape
 
     # Calculate row position
     row_offset_y = (i - (key_count - 1) / 2) * u
-    print(f"  Target row position: Y={row_offset_y:.1f}mm")
+    print(f"  Row position: Y={row_offset_y:.1f}mm")
 
-    # Step 1: Center at origin with row offset (BEFORE rotations)
-    mesh.translate(base_offset_x, base_offset_y + row_offset_y, base_offset_z)
-    print(f"  Step 1: Centered at origin with Y offset")
+    # Build transformation using FreeCAD Placement
+    # Order: translate to row position, then pitch, then roll around elevated axis
 
-    # Step 2: Pitch rotation around Y axis (at origin)
-    pitch_matrix = Matrix()
-    pitch_matrix.rotateY(math.radians(pitch_angle))
-    mesh.transform(pitch_matrix)
-    print(f"  Step 2: Pitched {pitch_angle}° around Y axis")
+    # Start with translation to row position
+    placement = FreeCAD.Placement()
+    placement.Base = FreeCAD.Vector(0, row_offset_y, 0)
 
-    # Step 3: Roll rotation around elevated X axis
-    # Translate down so roll axis is at origin
-    mesh.translate(0, 0, -roll_axis_height)
+    # Apply pitch rotation (around Y axis at origin)
+    pitch_rotation = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+    placement.Rotation = pitch_rotation
 
-    # Rotate around X axis
-    roll_matrix = Matrix()
-    roll_matrix.rotateX(math.radians(roll_angle))
-    mesh.transform(roll_matrix)
+    # For roll: rotate around X axis elevated by hand_radius
+    # This requires: translate down, rotate, translate up
+    # In Placement terms: first move to (0, row_offset_y, -hand_radius),
+    # then apply rotations, then move up by hand_radius
 
-    # Translate back up
-    mesh.translate(0, 0, roll_axis_height)
-    print(f"  Step 3: Rolled {roll_angle}° around elevated X axis (height={roll_axis_height}mm)")
+    # Combined rotation: pitch then roll
+    roll_rotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle)
+    combined_rotation = pitch_rotation.multiply(roll_rotation)
 
-    # Check final position
-    bbox_final = mesh.BoundBox
-    print(f"  Final bbox: X[{bbox_final.XMin:.1f},{bbox_final.XMax:.1f}] Y[{bbox_final.YMin:.1f},{bbox_final.YMax:.1f}] Z[{bbox_final.ZMin:.1f},{bbox_final.ZMax:.1f}]")
+    # Apply rotations first, then translate
+    # Final position needs to account for roll axis elevation
+    placement.Rotation = combined_rotation
+    placement.Base = FreeCAD.Vector(0, row_offset_y, 0)
 
-    # Convert to shape
-    shape = Part.Shape()
-    shape.makeShapeFromMesh(mesh.Topology, 0.1)
+    # Apply placement
+    obj.Placement = placement
 
-    # Create object with unique name
-    obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
-    obj.Shape = shape
-
-    final_bbox = obj.Shape.BoundBox
-    print(f"  Final bbox: X[{final_bbox.XMin:.1f},{final_bbox.XMax:.1f}] Y[{final_bbox.YMin:.1f},{final_bbox.YMax:.1f}] Z[{final_bbox.ZMin:.1f},{final_bbox.ZMax:.1f}]")
-    print(f"  Object name: {obj.Name}")
+    print(f"  Placement: Base={placement.Base}, Rotation=Pitch{pitch_angle}°+Roll{roll_angle}°")
+    print(f"  BBox: Y[{obj.Shape.BoundBox.YMin:.1f}, {obj.Shape.BoundBox.YMax:.1f}]")
 
 doc.recompute()
-print(f"\nSUCCESS: Created {len(doc.Objects)} keycaps")
+print(f"\nSUCCESS: Created {len(doc.Objects)} keycaps with Placement transforms")
