@@ -99,8 +99,15 @@ for i in range(key_count):
 
     # Step 4: Position in row along Y axis
     row_offset_y = (i - (key_count - 1) / 2) * u
+
+    # IMPORTANT: After rotations, we need to check if the geometry actually moved
+    bbox_before = mesh.BoundBox
     mesh.translate(0, row_offset_y, 0)
-    print(f"  Step 4: Positioned at Y={row_offset_y:.1f}mm")
+    bbox_after = mesh.BoundBox
+
+    print(f"  Step 4: Translated by Y={row_offset_y:.1f}mm")
+    print(f"    Before: Y[{bbox_before.YMin:.1f}, {bbox_before.YMax:.1f}]")
+    print(f"    After:  Y[{bbox_after.YMin:.1f}, {bbox_after.YMax:.1f}]")
 
     # Convert to shape
     shape = Part.Shape()
