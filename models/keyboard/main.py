@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Fresh Start: Single Keycap at Origin
-Position keycap with top center at (0, 0, 0) by translating the mesh vertices.
-No FreeCAD Placement transforms.
+Fresh Start: Single Keycap at Origin with Pitch
+Position keycap with top center at (0, 0, 0), then rotate around Y axis.
+No FreeCAD Placement transforms - all transforms applied to mesh vertices.
 """
 
 import FreeCAD
 import Part
 import Mesh
 import os
+import math
 
 print("=== Fresh start: Keycap positioning ===")
 
@@ -52,6 +53,23 @@ print(f"  Y: [{bbox_after.YMin:.2f}, {bbox_after.YMax:.2f}]")
 print(f"  Z: [{bbox_after.ZMin:.2f}, {bbox_after.ZMax:.2f}]")
 print(f"  Top center: ({(bbox_after.XMin+bbox_after.XMax)/2:.2f}, "
       f"{(bbox_after.YMin+bbox_after.YMax)/2:.2f}, {bbox_after.ZMax:.2f})")
+
+# Apply pitch rotation around Y axis (45 degrees)
+pitch_angle = 45  # degrees
+print(f"\nApplying {pitch_angle}° pitch rotation around Y axis")
+
+# Create rotation matrix for Y axis rotation
+# Rotation happens around origin, which is now at the top center of the keycap
+rotation_axis = FreeCAD.Vector(0, 1, 0)
+rotation_angle = math.radians(pitch_angle)
+keycap_mesh.rotate(0, 0, 0, rotation_axis.x, rotation_axis.y, rotation_axis.z, rotation_angle)
+
+# Verify the rotation
+bbox_rotated = keycap_mesh.BoundBox
+print(f"\nAfter rotation:")
+print(f"  X: [{bbox_rotated.XMin:.2f}, {bbox_rotated.XMax:.2f}]")
+print(f"  Y: [{bbox_rotated.YMin:.2f}, {bbox_rotated.YMax:.2f}]")
+print(f"  Z: [{bbox_rotated.ZMin:.2f}, {bbox_rotated.ZMax:.2f}]")
 
 # Convert to shape
 keycap_shape = Part.Shape()
