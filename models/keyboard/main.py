@@ -45,9 +45,11 @@ print(f"\nBase offset for centering: ({base_offset_x:.2f}, {base_offset_y:.2f}, 
 num_keycaps = 5
 keycap_spacing = 19.0  # mm between keycap centers (standard Cherry MX spacing)
 roll_angle = 10  # degrees, rotation around X axis
+roll_axis_height = 50.0  # mm above the keycap top (hand pivot point)
 
 print(f"\nCreating row of {num_keycaps} keycaps with {roll_angle}° roll")
 print(f"Spacing: {keycap_spacing}mm")
+print(f"Roll axis height: {roll_axis_height}mm above keycap top")
 
 # Track transformation matrices
 transformations = []
@@ -62,18 +64,29 @@ for i in range(num_keycaps):
     # Step 1: Center at origin (top center at 0,0,0)
     keycap_mesh.translate(base_offset_x, base_offset_y, base_offset_z)
 
-    # Step 2: Apply roll rotation around X axis at origin
+    # Step 2: Apply roll rotation around X axis elevated above keycap
+    # The roll axis is parallel to X axis but at height roll_axis_height above keycap top
+    # To rotate around elevated axis:
+    # - Translate down by roll_axis_height (move rotation center to origin)
+    # - Rotate around X axis at origin
+    # - Translate back up by roll_axis_height
     from FreeCAD import Matrix
+
+    # Move down to put roll axis at origin
+    keycap_mesh.translate(0, 0, -roll_axis_height)
+
+    # Rotate around X axis at origin
     roll_matrix = Matrix()
     roll_matrix.rotateX(math.radians(roll_angle))
     keycap_mesh.transform(roll_matrix)
 
+    # Move back up
+    keycap_mesh.translate(0, 0, roll_axis_height)
+
     # Step 3: Translate to position in row
     # Position along Y axis, centered around origin
     row_offset_y = (i - (num_keycaps - 1) / 2) * keycap_spacing
-    translation_matrix = Matrix()
-    translation_matrix.move(FreeCAD.Vector(0, row_offset_y, 0))
-    keycap_mesh.transform(translation_matrix)
+    keycap_mesh.translate(0, row_offset_y, 0)
 
     # Record the combined transformation
     combined_matrix = Matrix()
