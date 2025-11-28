@@ -54,7 +54,7 @@ base_offset_z = -bbox.ZMax
 print(f"\nBase offset for centering: ({base_offset_x:.2f}, {base_offset_y:.2f}, {base_offset_z:.2f})")
 
 # Configuration for keyboard row
-num_keycaps = 5
+num_keycaps = 2  # Start with 2 for debugging
 keycap_spacing = 19.0  # mm between keycap centers (standard Cherry MX spacing)
 roll_angle = 10  # degrees, rotation around X axis
 roll_axis_height = hand_radius  # mm above the keycap top (hand pivot point)
@@ -62,6 +62,7 @@ roll_axis_height = hand_radius  # mm above the keycap top (hand pivot point)
 print(f"\nCreating row of {num_keycaps} keycaps with {roll_angle}° roll")
 print(f"Spacing: {keycap_spacing}mm")
 print(f"Roll axis height: {roll_axis_height}mm above keycap top (hand radius)")
+print(f"DEBUG: hand_diameter={hand_diameter}, hand_radius={hand_radius}")
 
 # Track transformation matrices
 transformations = []
