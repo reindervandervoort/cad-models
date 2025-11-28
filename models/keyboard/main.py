@@ -20,8 +20,20 @@ if 'doc' not in dir():
 else:
     print("Using provided document (backend mode)")
 
-# Load keycap STL once to get dimensions
+# Load parameters from input.json
 script_dir = os.path.dirname(os.path.abspath(__file__))
+import json
+input_file = os.path.join(script_dir, "input.json")
+with open(input_file, 'r') as f:
+    params = json.load(f)
+
+hand_diameter = params.get('handDiameter', 192)
+hand_radius = hand_diameter / 2
+print(f"\nLoaded parameters:")
+print(f"  Hand diameter: {hand_diameter}mm")
+print(f"  Hand radius: {hand_radius}mm")
+
+# Load keycap STL once to get dimensions
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 
 print(f"\nLoading template: {keycap_stl}")
@@ -45,11 +57,11 @@ print(f"\nBase offset for centering: ({base_offset_x:.2f}, {base_offset_y:.2f}, 
 num_keycaps = 5
 keycap_spacing = 19.0  # mm between keycap centers (standard Cherry MX spacing)
 roll_angle = 10  # degrees, rotation around X axis
-roll_axis_height = 50.0  # mm above the keycap top (hand pivot point)
+roll_axis_height = hand_radius  # mm above the keycap top (hand pivot point)
 
 print(f"\nCreating row of {num_keycaps} keycaps with {roll_angle}° roll")
 print(f"Spacing: {keycap_spacing}mm")
-print(f"Roll axis height: {roll_axis_height}mm above keycap top")
+print(f"Roll axis height: {roll_axis_height}mm above keycap top (hand radius)")
 
 # Track transformation matrices
 transformations = []
