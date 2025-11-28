@@ -85,7 +85,7 @@ keycap_shape = Part.Shape()
 keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
 
 # Load and prepare base switch mesh
-switch_stl = os.path.join(script_dir, "kailh_choc_switch.stl")
+switch_stl = os.path.join(script_dir, "kailhlowprofilev102.stl")
 print(f"Loading switch: {switch_stl}")
 
 switch_mesh = Mesh.Mesh(switch_stl)
