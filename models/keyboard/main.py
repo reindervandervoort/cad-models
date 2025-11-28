@@ -60,9 +60,17 @@ print(f"\nApplying {pitch_angle}° pitch rotation around Y axis")
 
 # Create rotation matrix for Y axis rotation
 # Rotation happens around origin, which is now at the top center of the keycap
+# Mesh.rotate takes: center point (x,y,z), axis vector (x,y,z), and angle in radians
+rotation_center = FreeCAD.Vector(0, 0, 0)
 rotation_axis = FreeCAD.Vector(0, 1, 0)
 rotation_angle = math.radians(pitch_angle)
-keycap_mesh.rotate(0, 0, 0, rotation_axis.x, rotation_axis.y, rotation_axis.z, rotation_angle)
+
+# Create rotation matrix and apply it
+from FreeCAD import Matrix, Rotation
+rotation = Rotation(rotation_axis, math.degrees(rotation_angle))
+matrix = Matrix()
+matrix.rotateY(rotation_angle)
+keycap_mesh.transform(matrix)
 
 # Verify the rotation
 bbox_rotated = keycap_mesh.BoundBox
