@@ -62,27 +62,26 @@ for i in range(key_count):
     obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
     obj.Shape = base_shape
 
-    # Calculate row position
-    row_offset_y = (i - (key_count - 1) / 2) * u
-    print(f"  Row position: Y={row_offset_y:.1f}mm")
+    # Calculate arc angle for this keycap based on its position in the row
+    # Arc length = row_offset_y, radius = hand_radius
+    # angle (radians) = arc_length / radius
+    row_offset_y_linear = (i - (key_count - 1) / 2) * u
 
-    # For rotation around elevated X axis:
-    # The keycap at (0, Y, 0) rotates around axis at (0, Y, hand_radius)
-    # After roll rotation by angle θ:
-    # - Y stays the same
-    # - Z = hand_radius - hand_radius * cos(θ) = hand_radius * (1 - cos(θ))
-    # This gives the arc position
+    # Convert linear spacing to angle on the circular arc
+    keycap_angle = row_offset_y_linear / hand_radius  # radians
+    keycap_angle_deg = math.degrees(keycap_angle)
 
-    roll_rad = math.radians(roll_angle)
+    print(f"  Position in row: {i}, Arc angle: {keycap_angle_deg:.2f}°")
 
-    # Position after roll around elevated axis
+    # Position on the circular arc around X axis at height hand_radius
+    # The arc is in the YZ plane
     pos_x = 0
-    pos_y = row_offset_y
-    pos_z = hand_radius * (1 - math.cos(roll_rad))
+    pos_y = hand_radius * math.sin(keycap_angle)
+    pos_z = hand_radius * (1 - math.cos(keycap_angle))
 
-    # Rotations: pitch around Y, then roll around X
+    # Rotations: pitch around Y, then roll by the arc angle
     pitch_rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
-    roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle)
+    roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), keycap_angle_deg)
     combined_rot = pitch_rot.multiply(roll_rot)
 
     # Create placement
