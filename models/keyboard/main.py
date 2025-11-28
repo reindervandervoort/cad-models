@@ -88,19 +88,32 @@ keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
 switch_stl = os.path.join(script_dir, "kailhlowprofilev102.stl")
 print(f"Loading switch: {switch_stl}")
 
-switch_mesh = Mesh.Mesh(switch_stl)
-switch_bbox = switch_mesh.BoundBox
+try:
+    switch_mesh = Mesh.Mesh(switch_stl)
+    switch_bbox = switch_mesh.BoundBox
 
-# Center the switch mesh (top at Z=0)
-switch_offset_x = -(switch_bbox.XMin + switch_bbox.XMax) / 2
-switch_offset_y = -(switch_bbox.YMin + switch_bbox.YMax) / 2
-switch_offset_z = -switch_bbox.ZMax
-switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
+    print(f"Switch original bbox: X[{switch_bbox.XMin:.1f}, {switch_bbox.XMax:.1f}] Y[{switch_bbox.YMin:.1f}, {switch_bbox.YMax:.1f}] Z[{switch_bbox.ZMin:.1f}, {switch_bbox.ZMax:.1f}]")
 
-switch_shape = Part.Shape()
-switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
+    # Center the switch mesh (top at Z=0)
+    switch_offset_x = -(switch_bbox.XMin + switch_bbox.XMax) / 2
+    switch_offset_y = -(switch_bbox.YMin + switch_bbox.YMax) / 2
+    switch_offset_z = -switch_bbox.ZMax
 
-print(f"Switch bbox: X[{switch_bbox.XMin:.1f}, {switch_bbox.XMax:.1f}] Y[{switch_bbox.YMin:.1f}, {switch_bbox.YMax:.1f}] Z[{switch_bbox.ZMin:.1f}, {switch_bbox.ZMax:.1f}]")
+    print(f"Switch offset: ({switch_offset_x:.1f}, {switch_offset_y:.1f}, {switch_offset_z:.1f})")
+
+    switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
+
+    switch_shape = Part.Shape()
+    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
+    print(f"Switch shape created successfully")
+
+except Exception as e:
+    print(f"ERROR loading switch: {e}")
+    import traceback
+    traceback.print_exc()
+    # Create a dummy box as fallback
+    switch_shape = Part.makeBox(10, 10, 5)
+    print("Using fallback box for switch")
 
 # Create keycaps and switches
 for i in range(key_count):
