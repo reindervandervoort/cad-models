@@ -31,11 +31,13 @@ hand_diameter = params.get('handDiameter', 192)
 hand_radius = hand_diameter / 2
 key_count = params.get('keyCount', 5)
 u = params.get('u', 18)  # Unit size in mm
+pitch_angle = params.get('pitch', 45)  # Pitch in degrees
 
 print(f"\nParameters:")
 print(f"  Hand diameter: {hand_diameter}mm (radius: {hand_radius}mm)")
 print(f"  Key count: {key_count}")
 print(f"  Unit spacing: {u}mm")
+print(f"  Pitch angle: {pitch_angle}°")
 
 # Load keycap STL once to get dimensions
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
@@ -63,44 +65,54 @@ print(f"  Roll axis height: {roll_axis_height}mm")
 print(f"  Spacing: {u}mm")
 
 # Create each keycap
-for i in range(key_count):
-    print(f"\nKeycap {i+1}/{key_count}:")
+from FreeCAD import Matrix
 
-    # Load fresh mesh
-    keycap_mesh = Mesh.Mesh(keycap_stl)
+for i in range(key_count):
+    print(f"\n=== Keycap {i+1}/{key_count} ===")
+
+    # Load fresh mesh for this keycap
+    mesh = Mesh.Mesh(keycap_stl)
+    print(f"  Loaded mesh: {len(mesh.Facets)} facets")
 
     # Step 1: Center at origin (top at 0,0,0)
-    keycap_mesh.translate(base_offset_x, base_offset_y, base_offset_z)
+    mesh.translate(base_offset_x, base_offset_y, base_offset_z)
+    print(f"  Step 1: Centered at origin")
 
-    # Step 2: Roll rotation around elevated X axis
+    # Step 2: Pitch rotation around Y axis (at origin, which is top center)
+    pitch_matrix = Matrix()
+    pitch_matrix.rotateY(math.radians(pitch_angle))
+    mesh.transform(pitch_matrix)
+    print(f"  Step 2: Pitched {pitch_angle}° around Y axis")
+
+    # Step 3: Roll rotation around elevated X axis
     # Translate down so roll axis is at origin
-    keycap_mesh.translate(0, 0, -roll_axis_height)
+    mesh.translate(0, 0, -roll_axis_height)
 
     # Rotate around X axis
-    from FreeCAD import Matrix
     roll_matrix = Matrix()
     roll_matrix.rotateX(math.radians(roll_angle))
-    keycap_mesh.transform(roll_matrix)
+    mesh.transform(roll_matrix)
 
     # Translate back up
-    keycap_mesh.translate(0, 0, roll_axis_height)
+    mesh.translate(0, 0, roll_axis_height)
+    print(f"  Step 3: Rolled {roll_angle}° around elevated X axis (height={roll_axis_height}mm)")
 
-    # Step 3: Position in row along Y axis
+    # Step 4: Position in row along Y axis
     row_offset_y = (i - (key_count - 1) / 2) * u
-    keycap_mesh.translate(0, row_offset_y, 0)
-
-    print(f"  Position Y: {row_offset_y:.1f}mm")
+    mesh.translate(0, row_offset_y, 0)
+    print(f"  Step 4: Positioned at Y={row_offset_y:.1f}mm")
 
     # Convert to shape
-    keycap_shape = Part.Shape()
-    keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
+    shape = Part.Shape()
+    shape.makeShapeFromMesh(mesh.Topology, 0.1)
 
-    # Create object
-    keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
-    keycap_obj.Shape = keycap_shape
+    # Create object with unique name
+    obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
+    obj.Shape = shape
 
-    final_bbox = keycap_obj.Shape.BoundBox
-    print(f"  Final bbox: Y[{final_bbox.YMin:.1f}, {final_bbox.YMax:.1f}] Z[{final_bbox.ZMin:.1f}, {final_bbox.ZMax:.1f}]")
+    final_bbox = obj.Shape.BoundBox
+    print(f"  Final bbox: X[{final_bbox.XMin:.1f},{final_bbox.XMax:.1f}] Y[{final_bbox.YMin:.1f},{final_bbox.YMax:.1f}] Z[{final_bbox.ZMin:.1f},{final_bbox.ZMax:.1f}]")
+    print(f"  Object name: {obj.Name}")
 
 doc.recompute()
 print(f"\nSUCCESS: Created {len(doc.Objects)} keycaps")

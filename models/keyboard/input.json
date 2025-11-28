@@ -2,7 +2,7 @@
   "_comment": "Testing instancing fix - backend now uses 2 decimal precision",
   "u": 18,
   "keyHeight": 6,
-  "keyCount": 10,
+  "keyCount": 5,
   "switchOffset": 0.5,
   "pitch": 45,
   "handDiameter": 192,
