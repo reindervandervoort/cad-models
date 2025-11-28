@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fresh Start: Single Keycap at Origin with Pitch
-Position keycap with top center at (0, 0, 0), then rotate around Y axis.
-No FreeCAD Placement transforms - all transforms applied to mesh vertices.
+Keyboard Row: Multiple Keycaps with Roll
+Create a row of keycaps, each rotated with roll (around X axis).
+Track transformation matrices for each keycap.
 """
 
 import FreeCAD
@@ -11,7 +11,7 @@ import Mesh
 import os
 import math
 
-print("=== Fresh start: Keycap positioning ===")
+print("=== Keyboard row with roll rotation ===")
 
 # Document setup
 if 'doc' not in dir():
@@ -20,78 +20,98 @@ if 'doc' not in dir():
 else:
     print("Using provided document (backend mode)")
 
-# Load keycap STL
+# Load keycap STL once to get dimensions
 script_dir = os.path.dirname(os.path.abspath(__file__))
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 
-print(f"\nLoading: {keycap_stl}")
-keycap_mesh = Mesh.Mesh(keycap_stl)
+print(f"\nLoading template: {keycap_stl}")
+template_mesh = Mesh.Mesh(keycap_stl)
 
 # Get original bounding box
-bbox = keycap_mesh.BoundBox
+bbox = template_mesh.BoundBox
 print(f"\nOriginal STL bounding box:")
 print(f"  X: [{bbox.XMin:.2f}, {bbox.XMax:.2f}] width: {bbox.XLength:.2f}mm")
 print(f"  Y: [{bbox.YMin:.2f}, {bbox.YMax:.2f}] depth: {bbox.YLength:.2f}mm")
 print(f"  Z: [{bbox.ZMin:.2f}, {bbox.ZMax:.2f}] height: {bbox.ZLength:.2f}mm")
 
-# Calculate offset to position top center at origin
-# Target: top center at (0, 0, 0)
-offset_x = -(bbox.XMin + bbox.XMax) / 2  # Center X at 0
-offset_y = -(bbox.YMin + bbox.YMax) / 2  # Center Y at 0
-offset_z = -bbox.ZMax                     # Top at Z=0
+# Calculate base offset to center keycap with top at origin
+base_offset_x = -(bbox.XMin + bbox.XMax) / 2
+base_offset_y = -(bbox.YMin + bbox.YMax) / 2
+base_offset_z = -bbox.ZMax
 
-print(f"\nApplying offset: ({offset_x:.2f}, {offset_y:.2f}, {offset_z:.2f})")
+print(f"\nBase offset for centering: ({base_offset_x:.2f}, {base_offset_y:.2f}, {base_offset_z:.2f})")
 
-# Translate mesh vertices
-keycap_mesh.translate(offset_x, offset_y, offset_z)
+# Configuration for keyboard row
+num_keycaps = 5
+keycap_spacing = 19.0  # mm between keycap centers (standard Cherry MX spacing)
+roll_angle = 10  # degrees, rotation around X axis
 
-# Verify the translation
-bbox_after = keycap_mesh.BoundBox
-print(f"\nAfter translation:")
-print(f"  X: [{bbox_after.XMin:.2f}, {bbox_after.XMax:.2f}]")
-print(f"  Y: [{bbox_after.YMin:.2f}, {bbox_after.YMax:.2f}]")
-print(f"  Z: [{bbox_after.ZMin:.2f}, {bbox_after.ZMax:.2f}]")
-print(f"  Top center: ({(bbox_after.XMin+bbox_after.XMax)/2:.2f}, "
-      f"{(bbox_after.YMin+bbox_after.YMax)/2:.2f}, {bbox_after.ZMax:.2f})")
+print(f"\nCreating row of {num_keycaps} keycaps with {roll_angle}° roll")
+print(f"Spacing: {keycap_spacing}mm")
 
-# Apply pitch rotation around Y axis (45 degrees)
-pitch_angle = 45  # degrees
-print(f"\nApplying {pitch_angle}° pitch rotation around Y axis")
+# Track transformation matrices
+transformations = []
 
-# Create rotation matrix for Y axis rotation
-# Rotation happens around origin, which is now at the top center of the keycap
-# Mesh.rotate takes: center point (x,y,z), axis vector (x,y,z), and angle in radians
-rotation_center = FreeCAD.Vector(0, 0, 0)
-rotation_axis = FreeCAD.Vector(0, 1, 0)
-rotation_angle = math.radians(pitch_angle)
+# Create each keycap
+for i in range(num_keycaps):
+    print(f"\n--- Keycap {i+1}/{num_keycaps} ---")
 
-# Create rotation matrix and apply it
-from FreeCAD import Matrix, Rotation
-rotation = Rotation(rotation_axis, math.degrees(rotation_angle))
-matrix = Matrix()
-matrix.rotateY(rotation_angle)
-keycap_mesh.transform(matrix)
+    # Load fresh mesh for this keycap
+    keycap_mesh = Mesh.Mesh(keycap_stl)
 
-# Verify the rotation
-bbox_rotated = keycap_mesh.BoundBox
-print(f"\nAfter rotation:")
-print(f"  X: [{bbox_rotated.XMin:.2f}, {bbox_rotated.XMax:.2f}]")
-print(f"  Y: [{bbox_rotated.YMin:.2f}, {bbox_rotated.YMax:.2f}]")
-print(f"  Z: [{bbox_rotated.ZMin:.2f}, {bbox_rotated.ZMax:.2f}]")
+    # Step 1: Center at origin (top center at 0,0,0)
+    keycap_mesh.translate(base_offset_x, base_offset_y, base_offset_z)
 
-# Convert to shape
-keycap_shape = Part.Shape()
-keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
+    # Step 2: Apply roll rotation around X axis at origin
+    from FreeCAD import Matrix
+    roll_matrix = Matrix()
+    roll_matrix.rotateX(math.radians(roll_angle))
+    keycap_mesh.transform(roll_matrix)
 
-# Create object with identity placement
-keycap_obj = doc.addObject("Part::Feature", "Keycap")
-keycap_obj.Shape = keycap_shape
+    # Step 3: Translate to position in row
+    # Position along Y axis, centered around origin
+    row_offset_y = (i - (num_keycaps - 1) / 2) * keycap_spacing
+    translation_matrix = Matrix()
+    translation_matrix.move(FreeCAD.Vector(0, row_offset_y, 0))
+    keycap_mesh.transform(translation_matrix)
 
-print(f"\nFinal object:")
-print(f"  Placement: {keycap_obj.Placement}")
-print(f"  Valid: {keycap_obj.Shape.isValid()}")
-print(f"  Vertices: {len(keycap_obj.Shape.Vertexes)}")
-print(f"  Faces: {len(keycap_obj.Shape.Faces)}")
+    # Record the combined transformation
+    combined_matrix = Matrix()
+    # Translation to center
+    combined_matrix.move(FreeCAD.Vector(base_offset_x, base_offset_y, base_offset_z))
+    # Roll rotation
+    combined_matrix = combined_matrix.multiply(roll_matrix)
+    # Row position translation
+    combined_matrix = combined_matrix.multiply(translation_matrix)
+
+    transformations.append({
+        'keycap_index': i,
+        'position': (0, row_offset_y, 0),
+        'roll_degrees': roll_angle,
+        'matrix': combined_matrix
+    })
+
+    print(f"  Position: Y={row_offset_y:.2f}mm")
+    print(f"  Roll: {roll_angle}°")
+    print(f"  Matrix: {combined_matrix}")
+
+    # Convert to shape
+    keycap_shape = Part.Shape()
+    keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
+
+    # Create object
+    keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1}")
+    keycap_obj.Shape = keycap_shape
+
+    bbox_final = keycap_obj.Shape.BoundBox
+    print(f"  Final bbox: X[{bbox_final.XMin:.1f}, {bbox_final.XMax:.1f}] "
+          f"Y[{bbox_final.YMin:.1f}, {bbox_final.YMax:.1f}] "
+          f"Z[{bbox_final.ZMin:.1f}, {bbox_final.ZMax:.1f}]")
 
 doc.recompute()
-print(f"\nSUCCESS: {len(doc.Objects)} object(s) created")
+
+print(f"\n=== Transformation Summary ===")
+for t in transformations:
+    print(f"Keycap {t['keycap_index']+1}: position Y={t['position'][1]:.2f}mm, roll={t['roll_degrees']}°")
+
+print(f"\nSUCCESS: Created {len(doc.Objects)} keycaps")
