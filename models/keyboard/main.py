@@ -66,39 +66,32 @@ for i in range(key_count):
     row_offset_y = (i - (key_count - 1) / 2) * u
     print(f"  Row position: Y={row_offset_y:.1f}mm")
 
-    # Transform sequence using Placement.multiply():
-    # 1. Translate to row position: (0, row_offset_y, 0)
-    # 2. Apply pitch rotation around Y axis at that location
-    # 3. Translate down by hand_radius: (0, 0, -hand_radius)
-    # 4. Apply roll rotation around X axis (now at origin)
-    # 5. Translate back up by hand_radius: (0, 0, hand_radius)
+    # For rotation around elevated X axis:
+    # The keycap at (0, Y, 0) rotates around axis at (0, Y, hand_radius)
+    # After roll rotation by angle θ:
+    # - Y stays the same
+    # - Z = hand_radius - hand_radius * cos(θ) = hand_radius * (1 - cos(θ))
+    # This gives the arc position
 
-    # Start with identity
-    result = FreeCAD.Placement()
+    roll_rad = math.radians(roll_angle)
 
-    # Step 1: Translate to row position
-    t1 = FreeCAD.Placement(FreeCAD.Vector(0, row_offset_y, 0), FreeCAD.Rotation())
-    result = result.multiply(t1)
+    # Position after roll around elevated axis
+    pos_x = 0
+    pos_y = row_offset_y
+    pos_z = hand_radius * (1 - math.cos(roll_rad))
 
-    # Step 2: Pitch rotation around Y axis (at current position)
-    pitch_rot = FreeCAD.Placement(FreeCAD.Vector(0, 0, 0), FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle))
-    result = result.multiply(pitch_rot)
+    # Rotations: pitch around Y, then roll around X
+    pitch_rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+    roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle)
+    combined_rot = pitch_rot.multiply(roll_rot)
 
-    # Step 3: Translate down by hand_radius
-    t2 = FreeCAD.Placement(FreeCAD.Vector(0, 0, -hand_radius), FreeCAD.Rotation())
-    result = result.multiply(t2)
+    # Create placement
+    placement = FreeCAD.Placement(FreeCAD.Vector(pos_x, pos_y, pos_z), combined_rot)
 
-    # Step 4: Roll rotation around X axis
-    roll_rot = FreeCAD.Placement(FreeCAD.Vector(0, 0, 0), FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), roll_angle))
-    result = result.multiply(roll_rot)
+    obj.Placement = placement
 
-    # Step 5: Translate back up by hand_radius
-    t3 = FreeCAD.Placement(FreeCAD.Vector(0, 0, hand_radius), FreeCAD.Rotation())
-    result = result.multiply(t3)
-
-    obj.Placement = result
-
-    print(f"  Placement: Base=({result.Base.x:.1f}, {result.Base.y:.1f}, {result.Base.z:.1f})")
+    print(f"  Placement: Base=({pos_x:.1f}, {pos_y:.1f}, {pos_z:.1f})")
+    print(f"  Rotation: Pitch={pitch_angle}° + Roll={roll_angle}°")
     print(f"  BBox: Y[{obj.Shape.BoundBox.YMin:.1f}, {obj.Shape.BoundBox.YMax:.1f}] Z[{obj.Shape.BoundBox.ZMin:.1f}, {obj.Shape.BoundBox.ZMax:.1f}]")
 
 doc.recompute()
