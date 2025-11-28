@@ -79,10 +79,10 @@ for i in range(key_count):
     pos_y = hand_radius * math.sin(keycap_angle)
     pos_z = hand_radius * (1 - math.cos(keycap_angle))
 
-    # Rotations: pitch around Y, then roll by the arc angle
-    pitch_rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+    # Rotations: roll by the arc angle first, THEN pitch around Y
     roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), keycap_angle_deg)
-    combined_rot = pitch_rot.multiply(roll_rot)
+    pitch_rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+    combined_rot = roll_rot.multiply(pitch_rot)
 
     # Create placement
     placement = FreeCAD.Placement(FreeCAD.Vector(pos_x, pos_y, pos_z), combined_rot)
@@ -90,7 +90,7 @@ for i in range(key_count):
     obj.Placement = placement
 
     print(f"  Placement: Base=({pos_x:.1f}, {pos_y:.1f}, {pos_z:.1f})")
-    print(f"  Rotation: Pitch={pitch_angle}° + Roll={roll_angle}°")
+    print(f"  Rotation: Roll={keycap_angle_deg:.2f}° then Pitch={pitch_angle}°")
     print(f"  BBox: Y[{obj.Shape.BoundBox.YMin:.1f}, {obj.Shape.BoundBox.YMax:.1f}] Z[{obj.Shape.BoundBox.ZMin:.1f}, {obj.Shape.BoundBox.ZMax:.1f}]")
 
 doc.recompute()
