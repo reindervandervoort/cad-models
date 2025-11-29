@@ -49,37 +49,48 @@ curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs 
 
 ### 2. Wait for Backend Completion
 
-The backend may still be processing. Poll every 10 seconds until ready.
+The backend may still be processing. Check GitHub Actions workflow status every 10 seconds.
 
-**Check if model exists and is ready:**
+**IMPORTANT**: Do NOT poll the CDN - it requires authentication. Instead, check the GitHub Actions workflow status.
+
+**Check GitHub Actions workflow status:**
 ```bash
-MODEL="keyboard"
-VERSION="1.1.144"
-CDN_URL="https://d2j2tqi3nk8zjp.cloudfront.net"
+RUN_NUMBER=145
 
-# Check if assembly.json exists (indicates completion)
-curl -sI "${CDN_URL}/models/${MODEL}/${VERSION}/assembly.json" | grep "HTTP"
+# Check if the workflow has completed
+STATUS=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"status"' | head -1 | cut -d'"' -f4)
+CONCLUSION=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"conclusion"' | head -1 | cut -d'"' -f4)
 
-# If you get 200 OK, the model is ready
-# If you get 404, wait 10 seconds and try again
+echo "Status: $STATUS"
+echo "Conclusion: $CONCLUSION"
+
+# Status can be: "queued", "in_progress", "completed"
+# Conclusion can be: "success", "failure", "cancelled", null
 ```
 
 **Poll loop example:**
 ```bash
-MODEL="keyboard"
-VERSION="1.1.144"
-CDN_URL="https://d2j2tqi3nk8zjp.cloudfront.net"
+RUN_NUMBER=145
 MAX_WAIT=180  # 3 minutes max wait
 
-for i in $(seq 1 18); do
-  HTTP_CODE=$(curl -sI "${CDN_URL}/models/${MODEL}/${VERSION}/assembly.json" | grep "HTTP" | awk '{print $2}')
+echo "Waiting for GitHub Actions run #${RUN_NUMBER}..."
 
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "Model is ready!"
-    break
+for i in $(seq 1 18); do
+  STATUS=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"status"' | head -1 | cut -d'"' -f4)
+
+  if [ "$STATUS" = "completed" ]; then
+    CONCLUSION=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"conclusion"' | head -1 | cut -d'"' -f4)
+
+    if [ "$CONCLUSION" = "success" ]; then
+      echo "✓ Workflow completed successfully!"
+      break
+    else
+      echo "✗ Workflow failed with conclusion: $CONCLUSION"
+      exit 1
+    fi
   fi
 
-  echo "Waiting for model... (attempt $i/18)"
+  echo "Waiting for workflow... ($i/18) Status: $STATUS"
   sleep 10
 done
 ```
@@ -130,6 +141,24 @@ After viewing the model:
    - Clear description of what you see
    - Any issues or concerns
    - Success confirmation if everything looks good
+   - **ALWAYS include the viewer URL** at the end in this format:
+
+```
+🔗 View in 3D: https://d261sntojya397.cloudfront.net/viewer?model={model}&version={version}
+```
+
+Example:
+```
+✓ Model keyboard v2.0.145 generated successfully!
+
+Visible components:
+- 5 keycaps arranged in curved arc with 45° pitch
+- 5 Kailh Choc switches positioned 1mm below keycaps
+- Proper roll rotation following circular path
+- All transformations appear correct
+
+🔗 View in 3D: https://d261sntojya397.cloudfront.net/viewer?model=keyboard&version=2.0.145
+```
 
 ## Example Full Workflow
 
@@ -137,18 +166,26 @@ After viewing the model:
 # 1. Get latest run number
 RUN_NUMBER=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -m1 '"run_number"' | grep -o '[0-9]*')
 MODEL="keyboard"
-VERSION="1.1.${RUN_NUMBER}"
+VERSION="2.0.${RUN_NUMBER}"
 echo "Reviewing ${MODEL} v${VERSION}"
 
-# 2. Wait for backend (poll every 10 seconds, max 3 minutes)
-CDN_URL="https://d2j2tqi3nk8zjp.cloudfront.net"
+# 2. Wait for GitHub Actions workflow completion (poll every 10 seconds)
+echo "Waiting for GitHub Actions run #${RUN_NUMBER}..."
 for i in $(seq 1 18); do
-  HTTP_CODE=$(curl -sI "${CDN_URL}/models/${MODEL}/${VERSION}/assembly.json" | grep "HTTP" | awk '{print $2}')
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "Model ready!"
-    break
+  STATUS=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"status"' | head -1 | cut -d'"' -f4)
+
+  if [ "$STATUS" = "completed" ]; then
+    CONCLUSION=$(curl -s https://api.github.com/repos/reindervandervoort/cad-models/actions/runs | grep -A 5 "\"run_number\": ${RUN_NUMBER}" | grep '"conclusion"' | head -1 | cut -d'"' -f4)
+    if [ "$CONCLUSION" = "success" ]; then
+      echo "✓ Workflow completed successfully!"
+      break
+    else
+      echo "✗ Workflow failed: $CONCLUSION"
+      exit 1
+    fi
   fi
-  echo "Waiting... ($i/18)"
+
+  echo "Waiting... ($i/18) Status: $STATUS"
   sleep 10
 done
 
@@ -156,8 +193,9 @@ done
 cd /home/droid/cad-models
 node .claude/scripts/view_model.js ${MODEL} ${VERSION}
 
-# 4. Analyze screenshot
-# (Use Read tool to view /tmp/model_${MODEL}_${VERSION//./_}.png)
+# 4. Analyze screenshot and report
+# Use Read tool to view /tmp/model_${MODEL}_${VERSION//./_}.png
+# Always include: https://d261sntojya397.cloudfront.net/viewer?model=${MODEL}&version=${VERSION}
 ```
 
 ## Common Issues and Solutions
