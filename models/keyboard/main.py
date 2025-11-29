@@ -35,7 +35,7 @@ switch_offset = 6  # mm below keycap top
 print(f"\nParameters: keyCount={key_count}, u={u}mm, pitch={pitch_angle}°, hand_radius={hand_radius}mm")
 
 # Helper function to calculate placement for any component
-def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle, z_offset=0):
+def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
     """
     Calculate placement for a component on the circular arc.
 
@@ -45,10 +45,9 @@ def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle, 
         u: Spacing between keys
         hand_radius: Radius of circular arc
         pitch_angle: Pitch angle in degrees
-        z_offset: Additional Z offset from keycap top (negative = below)
 
     Returns:
-        FreeCAD.Placement object
+        (FreeCAD.Placement, angle_deg) tuple
     """
     # Calculate arc angle for this position
     row_offset_y_linear = (position_index - (key_count - 1) / 2) * u
@@ -58,7 +57,7 @@ def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle, 
     # Position on the circular arc around X axis at height hand_radius
     pos_x = 0
     pos_y = hand_radius * math.sin(keycap_angle)
-    pos_z = hand_radius * (1 - math.cos(keycap_angle)) + z_offset
+    pos_z = hand_radius * (1 - math.cos(keycap_angle))
 
     # Rotations: roll by the arc angle first, THEN pitch around Y
     roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), keycap_angle_deg)
@@ -126,20 +125,29 @@ except Exception as e:
 for i in range(key_count):
     print(f"\n=== Key {i+1}/{key_count} ===")
 
-    # Create keycap
+    # Calculate base placement (same for both keycap and switch)
+    base_placement, angle = calculate_placement(i, key_count, u, hand_radius, pitch_angle)
+
+    # Create keycap at base placement
     keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
     keycap_obj.Shape = keycap_shape
-    keycap_placement, angle = calculate_placement(i, key_count, u, hand_radius, pitch_angle, z_offset=0)
-    keycap_obj.Placement = keycap_placement
+    keycap_obj.Placement = base_placement
 
-    # Create switch (6mm below keycap top)
+    # Create switch offset in LOCAL coordinate system
+    # The switch needs to be 6mm below in the -Z direction of the rotated coordinate system
+    local_offset = FreeCAD.Vector(0, 0, -switch_offset)
+    # Rotate the offset vector by the same rotation as the keycap
+    global_offset = base_placement.Rotation.multVec(local_offset)
+    # Create switch placement: same rotation, but offset position
+    switch_pos = base_placement.Base.add(global_offset)
+    switch_placement = FreeCAD.Placement(switch_pos, base_placement.Rotation)
+
     switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1:02d}")
     switch_obj.Shape = switch_shape
-    switch_placement, _ = calculate_placement(i, key_count, u, hand_radius, pitch_angle, z_offset=-switch_offset)
     switch_obj.Placement = switch_placement
 
     print(f"  Arc angle: {angle:.2f}°")
-    print(f"  Keycap pos: ({keycap_placement.Base.x:.1f}, {keycap_placement.Base.y:.1f}, {keycap_placement.Base.z:.1f})")
+    print(f"  Keycap pos: ({base_placement.Base.x:.1f}, {base_placement.Base.y:.1f}, {base_placement.Base.z:.1f})")
     print(f"  Switch pos: ({switch_placement.Base.x:.1f}, {switch_placement.Base.y:.1f}, {switch_placement.Base.z:.1f})")
 
 doc.recompute()
