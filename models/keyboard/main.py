@@ -30,9 +30,9 @@ hand_radius = hand_diameter / 2
 key_count = params.get('keyCount', 5)
 u = params.get('u', 18)
 pitch_angle = params.get('pitch', 45)
-switch_offset = 6  # mm below keycap top
+switch_offset = params.get('switchOffset', 1)  # mm below keycap top
 
-print(f"\nParameters: keyCount={key_count}, u={u}mm, pitch={pitch_angle}°, hand_radius={hand_radius}mm")
+print(f"\nParameters: keyCount={key_count}, u={u}mm, pitch={pitch_angle}°, hand_radius={hand_radius}mm, switchOffset={switch_offset}mm")
 
 # Helper function to calculate placement for any component
 def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
