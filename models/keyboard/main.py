@@ -103,31 +103,29 @@ try:
 
     switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
 
-    # Harmonize mesh to fix normals and topology
+    # Harmonize mesh to fix normals
     switch_mesh.harmonizeNormals()
-    print(f"After harmonizing: solid={switch_mesh.isSolid()}")
 
-    # Convert mesh to shape using the sewShape method for better results
-    switch_shape = Part.Shape()
-    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
-
-    # Sew the shape to fix any gaps
-    switch_shape = switch_shape.sewShape()
-
-    # Try to make it a solid
-    if not switch_shape.isClosed():
-        print(f"WARNING: Switch shape not closed, attempting to fix...")
-        switch_shape = switch_shape.removeSplitter()
-
-    if switch_shape.isClosed():
+    # Just convert to shape without trying to make it a solid
+    # Keep it simple - don't sew, don't try to make solid, just convert the mesh faces
+    faces = []
+    for facet in switch_mesh.Facets:
+        # Get the three points of the triangle
+        p1 = FreeCAD.Vector(facet.Points[0])
+        p2 = FreeCAD.Vector(facet.Points[1])
+        p3 = FreeCAD.Vector(facet.Points[2])
+        # Create a face from the three points
         try:
-            switch_solid = Part.makeSolid(switch_shape)
-            switch_shape = switch_solid
-            print(f"Switch converted to solid successfully")
+            wire = Part.makePolygon([p1, p2, p3, p1])
+            face = Part.Face(wire)
+            faces.append(face)
         except:
-            print(f"Could not convert to solid, using shell")
+            pass  # Skip degenerate faces
 
-    print(f"Switch shape created: faces={len(switch_shape.Faces)}, closed={switch_shape.isClosed()}, valid={switch_shape.isValid()}")
+    # Create a compound of all faces (shell, not trying to make it solid)
+    switch_shape = Part.makeCompound(faces)
+
+    print(f"Switch shape created: {len(faces)} faces")
 
 except Exception as e:
     print(f"ERROR loading switch: {e}")
