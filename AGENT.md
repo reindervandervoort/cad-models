@@ -50,6 +50,11 @@ When you push changes to `models/**/*.py`:
 4. Workflow polls S3 `status.json` for completion
 5. On success, displays screenshots in job summary
 
+**IMPORTANT**: After pushing changes, ALWAYS run the review-model agent to view and verify the generated model:
+```
+Use the review-model agent to review the latest build
+```
+
 ### Manual Trigger
 
 ```bash
@@ -170,6 +175,28 @@ The backend captures isometric screenshots automatically using Playwright:
 - **Custom views**: Configure via `screenshots.json` in your model folder
 
 **Reviewing Model Changes (Iteration Workflow):**
+
+**RECOMMENDED: Use the Review Agent**
+
+For the fastest iteration workflow, use the dedicated review agent:
+
+```bash
+# The agent handles:
+# - Waiting for backend completion (polls every 10s)
+# - Using Playwright to view the model
+# - Taking screenshots and reporting results
+
+# Usage (from Claude Code):
+"Use the review-model agent to review the latest build"
+```
+
+The review agent (`.claude/agents/review-model.md`) is self-sufficient and knows how to:
+- Poll the backend every 10 seconds until ready
+- Use Playwright with stored credentials
+- View the model in the 3D viewer
+- Take screenshots and analyze results
+
+**Alternative: Manual Review**
 - The backend automatically renders screenshots for each build using Playwright
 - Screenshots appear in the GitHub Actions job summary at:
   `https://github.com/{user}/{repo}/actions/runs/{run_id}`
@@ -179,7 +206,7 @@ The backend captures isometric screenshots automatically using Playwright:
 - Iterate quickly by:
   1. Push changes to main (must modify `models/**/*.py` to trigger)
   2. Wait ~30 seconds for warm pool build
-  3. Check GitHub Actions for screenshots in job summary
+  3. Use review agent OR check GitHub Actions for screenshots
   4. Review positioning and make next iteration
 
 **Accessing Screenshots:**
