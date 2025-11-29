@@ -1,0 +1,8 @@
+{
+  "name": "cad-model-review-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for reviewing CAD model generation results",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
