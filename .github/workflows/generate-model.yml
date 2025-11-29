@@ -46,7 +46,7 @@ jobs:
             else
               echo "model_name=demo" >> $GITHUB_OUTPUT
             fi
-            echo "version=1.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "version=2.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
             COMMIT_SUBJECT=$(echo "${{ github.event.head_commit.message }}" | head -1)
             echo "change_desc=$COMMIT_SUBJECT" >> $GITHUB_OUTPUT
           fi

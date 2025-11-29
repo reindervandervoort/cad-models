@@ -2,6 +2,8 @@
 """
 Keyboard Row: Keycaps with Switches on Circular Arc
 Keycaps and switches positioned on curved row with pitch and roll
+
+Version 2.0: Refined switch positioning and mesh repair
 """
 
 import FreeCAD
