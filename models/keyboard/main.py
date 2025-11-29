@@ -108,7 +108,8 @@ def create_golden_spiral(start_diameter, arc_length_radians, tube_radius, center
         # Calculate point coordinates based on plane orientation
         if plane_normal.lower() == 'xz':
             # Spiral in X-Z plane (perpendicular to Y-axis)
-            x = r * math.cos(theta)
+            # Flipped horizontally by negating x
+            x = -r * math.cos(theta)
             y = 0
             z = r * math.sin(theta)
         elif plane_normal.lower() == 'xy':
