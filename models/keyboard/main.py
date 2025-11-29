@@ -102,16 +102,28 @@ try:
 
     switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
 
-    # Convert to shape with looser tolerance to avoid degenerate geometry
-    switch_shape = Part.Shape()
-    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.5)  # Increased from 0.1 to 0.5
+    # Try converting with progressively looser tolerances
+    switch_shape = None
+    for tolerance in [0.1, 0.2, 0.3]:
+        try:
+            test_shape = Part.Shape()
+            test_shape.makeShapeFromMesh(switch_mesh.Topology, tolerance)
 
-    # Simplify/fix the shape
-    if not switch_shape.isValid():
-        print("WARNING: Switch shape invalid, attempting to fix...")
-        switch_shape = switch_shape.removeSplitter()
+            # Fix if needed
+            if not test_shape.isValid():
+                test_shape = test_shape.removeSplitter()
 
-    print(f"Switch shape created successfully")
+            # Check if we got a reasonable shape (not just a box)
+            if test_shape.isValid() and len(test_shape.Faces) > 6:
+                switch_shape = test_shape
+                print(f"Switch shape created with tolerance {tolerance}, faces: {len(test_shape.Faces)}")
+                break
+        except Exception as e:
+            print(f"Failed with tolerance {tolerance}: {e}")
+            continue
+
+    if switch_shape is None:
+        raise Exception("Could not create valid switch shape with any tolerance")
 
 except Exception as e:
     print(f"ERROR loading switch: {e}")
