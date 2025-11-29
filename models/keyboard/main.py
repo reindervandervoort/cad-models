@@ -87,53 +87,16 @@ keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
 switch_stl = os.path.join(script_dir, "kailhlowprofilev102.stl")
 print(f"Loading switch: {switch_stl}")
 
-try:
-    switch_mesh = Mesh.Mesh(switch_stl)
-    switch_bbox = switch_mesh.BoundBox
+# For now, create a simple parametric switch shape instead of loading the problematic STL
+# The STL has degenerate geometry that causes Geom_RectangularTrimmedSurface errors
+# TODO: Fix or replace the switch STL file
 
-    print(f"Switch original bbox: X[{switch_bbox.XMin:.1f}, {switch_bbox.XMax:.1f}] Y[{switch_bbox.YMin:.1f}, {switch_bbox.YMax:.1f}] Z[{switch_bbox.ZMin:.1f}, {switch_bbox.ZMax:.1f}]")
-    print(f"Switch mesh facets: {switch_mesh.CountFacets}")
+# Create a simple switch housing shape (roughly 14x14mm base, 5mm tall)
+switch_base = Part.makeBox(14, 14, 3.5, FreeCAD.Vector(-7, -7, -3.5))
+switch_top = Part.makeBox(12, 12, 1.5, FreeCAD.Vector(-6, -6, 0))
+switch_shape = switch_base.fuse(switch_top)
 
-    # Center the switch mesh (top at Z=0)
-    switch_offset_x = -(switch_bbox.XMin + switch_bbox.XMax) / 2
-    switch_offset_y = -(switch_bbox.YMin + switch_bbox.YMax) / 2
-    switch_offset_z = -switch_bbox.ZMax
-
-    print(f"Switch offset: ({switch_offset_x:.1f}, {switch_offset_y:.1f}, {switch_offset_z:.1f})")
-
-    switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
-
-    # Harmonize mesh to fix normals
-    switch_mesh.harmonizeNormals()
-
-    # Just convert to shape without trying to make it a solid
-    # Keep it simple - don't sew, don't try to make solid, just convert the mesh faces
-    faces = []
-    for facet in switch_mesh.Facets:
-        # Get the three points of the triangle
-        p1 = FreeCAD.Vector(facet.Points[0])
-        p2 = FreeCAD.Vector(facet.Points[1])
-        p3 = FreeCAD.Vector(facet.Points[2])
-        # Create a face from the three points
-        try:
-            wire = Part.makePolygon([p1, p2, p3, p1])
-            face = Part.Face(wire)
-            faces.append(face)
-        except:
-            pass  # Skip degenerate faces
-
-    # Create a compound of all faces (shell, not trying to make it solid)
-    switch_shape = Part.makeCompound(faces)
-
-    print(f"Switch shape created: {len(faces)} faces")
-
-except Exception as e:
-    print(f"ERROR loading switch: {e}")
-    import traceback
-    traceback.print_exc()
-    # Create a dummy box as fallback
-    switch_shape = Part.makeBox(10, 10, 5)
-    print("Using fallback box for switch")
+print(f"Using parametric switch shape (14x14x5mm)")
 
 # Create keycaps and switches
 for i in range(key_count):
