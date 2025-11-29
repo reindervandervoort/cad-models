@@ -13,6 +13,9 @@ import os
 import math
 import json
 
+# Golden ratio constant
+PHI = (1 + math.sqrt(5)) / 2  # Approximately 1.618...
+
 print("=== Keyboard row with keycaps and switches ===")
 
 # Document setup
@@ -67,6 +70,107 @@ def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
     combined_rot = roll_rot.multiply(pitch_rot)
 
     return FreeCAD.Placement(FreeCAD.Vector(pos_x, pos_y, pos_z), combined_rot), keycap_angle_deg
+
+
+def create_golden_spiral(start_diameter, arc_length_radians, tube_radius, center, plane_normal='xz', num_segments=100):
+    """
+    Create a golden spiral as a swept tube.
+
+    Args:
+        start_diameter: Initial diameter of the spiral
+        arc_length_radians: Total angular length in radians (e.g., 2*pi for one full turn)
+        tube_radius: Radius of the circular cross-section tube
+        center: FreeCAD.Vector for the center of the spiral
+        plane_normal: Plane orientation ('xz' for X-Z plane, 'xy' for X-Y plane, etc.)
+        num_segments: Number of segments to approximate the spiral curve
+
+    Returns:
+        Part.Shape of the spiral tube
+    """
+    print(f"\n=== Creating Golden Spiral ===")
+    print(f"Start diameter: {start_diameter}mm")
+    print(f"Arc length: {arc_length_radians:.3f} radians ({math.degrees(arc_length_radians):.1f}°)")
+    print(f"Tube radius: {tube_radius}mm")
+    print(f"Center: ({center.x}, {center.y}, {center.z})")
+    print(f"Plane: {plane_normal}")
+
+    # Starting radius
+    a = start_diameter / 2
+
+    # Generate spiral points using golden spiral formula: r(θ) = a × φ^(-θ/(π/2))
+    points = []
+    for i in range(num_segments + 1):
+        theta = (arc_length_radians / num_segments) * i
+
+        # Golden spiral radius formula
+        r = a * (PHI ** (-theta / (math.pi / 2)))
+
+        # Calculate point coordinates based on plane orientation
+        if plane_normal.lower() == 'xz':
+            # Spiral in X-Z plane (perpendicular to Y-axis)
+            x = r * math.cos(theta)
+            y = 0
+            z = r * math.sin(theta)
+        elif plane_normal.lower() == 'xy':
+            # Spiral in X-Y plane (perpendicular to Z-axis)
+            x = r * math.cos(theta)
+            y = r * math.sin(theta)
+            z = 0
+        elif plane_normal.lower() == 'yz':
+            # Spiral in Y-Z plane (perpendicular to X-axis)
+            x = 0
+            y = r * math.cos(theta)
+            z = r * math.sin(theta)
+        else:
+            raise ValueError(f"Unknown plane orientation: {plane_normal}")
+
+        # Offset by center
+        point = FreeCAD.Vector(center.x + x, center.y + y, center.z + z)
+        points.append(point)
+
+    # Create the spiral path using BSpline
+    spiral_curve = Part.BSplineCurve()
+    spiral_curve.interpolate(points)
+    spiral_edge = spiral_curve.toShape()
+
+    # Create circular cross-section for the tube
+    circle_center = points[0]
+
+    # Calculate the tangent at the start to orient the circle perpendicular to the curve
+    tangent = points[1] - points[0]
+    tangent.normalize()
+
+    # Create a normal vector perpendicular to the tangent
+    if plane_normal.lower() == 'xz':
+        # For XZ plane, use Y-axis as reference
+        reference = FreeCAD.Vector(0, 1, 0)
+    elif plane_normal.lower() == 'xy':
+        # For XY plane, use Z-axis as reference
+        reference = FreeCAD.Vector(0, 0, 1)
+    else:  # yz
+        # For YZ plane, use X-axis as reference
+        reference = FreeCAD.Vector(1, 0, 0)
+
+    # Cross product to get perpendicular vector
+    normal = tangent.cross(reference)
+    if normal.Length < 0.001:
+        # If tangent is parallel to reference, use different reference
+        reference = FreeCAD.Vector(1, 0, 0) if plane_normal.lower() != 'yz' else FreeCAD.Vector(0, 1, 0)
+        normal = tangent.cross(reference)
+    normal.normalize()
+
+    # Create circle perpendicular to the starting tangent
+    circle = Part.makeCircle(tube_radius, circle_center, normal)
+    circle_wire = Part.Wire(circle)
+
+    # Sweep the circle along the spiral path to create the tube
+    spiral_tube = Part.Wire([spiral_edge]).makePipeShell([circle_wire], True, False)
+
+    end_radius = a * (PHI ** (-arc_length_radians / (math.pi / 2)))
+    print(f"End radius: {end_radius:.3f}mm (shrunk by factor of {a/end_radius:.3f})")
+    print(f"Golden spiral created with {num_segments} segments")
+
+    return spiral_tube
 
 
 # Load and prepare base keycap mesh
@@ -149,5 +253,24 @@ for i in range(key_count):
     print(f"  Keycap pos: ({base_placement.Base.x:.1f}, {base_placement.Base.y:.1f}, {base_placement.Base.z:.1f})")
     print(f"  Switch pos: ({switch_placement.Base.x:.1f}, {switch_placement.Base.y:.1f}, {switch_placement.Base.z:.1f})")
 
+# Create golden spiral
+# Parameters:
+# - Start diameter = handDiameter (from input.json)
+# - Arc length = 2π radians (one full revolution)
+# - Tube radius = 5mm
+# - Center at origin (0, 0, 0)
+# - Plane: X-Z (perpendicular to the Y-axis row direction)
+spiral_shape = create_golden_spiral(
+    start_diameter=hand_diameter,
+    arc_length_radians=2 * math.pi,
+    tube_radius=5.0,
+    center=FreeCAD.Vector(0, 0, 0),
+    plane_normal='xz',
+    num_segments=200  # Higher resolution for smooth spiral
+)
+
+spiral_obj = doc.addObject("Part::Feature", "GoldenSpiral")
+spiral_obj.Shape = spiral_shape
+
 doc.recompute()
-print(f"\nSUCCESS: Created {key_count} keycaps and {key_count} switches ({len(doc.Objects)} objects total)")
+print(f"\nSUCCESS: Created {key_count} keycaps, {key_count} switches, and 1 golden spiral ({len(doc.Objects)} objects total)")
