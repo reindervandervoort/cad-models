@@ -92,6 +92,7 @@ try:
     switch_bbox = switch_mesh.BoundBox
 
     print(f"Switch original bbox: X[{switch_bbox.XMin:.1f}, {switch_bbox.XMax:.1f}] Y[{switch_bbox.YMin:.1f}, {switch_bbox.YMax:.1f}] Z[{switch_bbox.ZMin:.1f}, {switch_bbox.ZMax:.1f}]")
+    print(f"Switch mesh facets: {switch_mesh.CountFacets}")
 
     # Center the switch mesh (top at Z=0)
     switch_offset_x = -(switch_bbox.XMin + switch_bbox.XMax) / 2
@@ -102,28 +103,31 @@ try:
 
     switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
 
-    # Try converting with progressively looser tolerances
-    switch_shape = None
-    for tolerance in [0.1, 0.2, 0.3]:
+    # Harmonize mesh to fix normals and topology
+    switch_mesh.harmonizeNormals()
+    print(f"After harmonizing: solid={switch_mesh.isSolid()}")
+
+    # Convert mesh to shape using the sewShape method for better results
+    switch_shape = Part.Shape()
+    switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
+
+    # Sew the shape to fix any gaps
+    switch_shape = switch_shape.sewShape()
+
+    # Try to make it a solid
+    if not switch_shape.isClosed():
+        print(f"WARNING: Switch shape not closed, attempting to fix...")
+        switch_shape = switch_shape.removeSplitter()
+
+    if switch_shape.isClosed():
         try:
-            test_shape = Part.Shape()
-            test_shape.makeShapeFromMesh(switch_mesh.Topology, tolerance)
+            switch_solid = Part.makeSolid(switch_shape)
+            switch_shape = switch_solid
+            print(f"Switch converted to solid successfully")
+        except:
+            print(f"Could not convert to solid, using shell")
 
-            # Fix if needed
-            if not test_shape.isValid():
-                test_shape = test_shape.removeSplitter()
-
-            # Check if we got a reasonable shape (not just a box)
-            if test_shape.isValid() and len(test_shape.Faces) > 6:
-                switch_shape = test_shape
-                print(f"Switch shape created with tolerance {tolerance}, faces: {len(test_shape.Faces)}")
-                break
-        except Exception as e:
-            print(f"Failed with tolerance {tolerance}: {e}")
-            continue
-
-    if switch_shape is None:
-        raise Exception("Could not create valid switch shape with any tolerance")
+    print(f"Switch shape created: faces={len(switch_shape.Faces)}, closed={switch_shape.isClosed()}, valid={switch_shape.isValid()}")
 
 except Exception as e:
     print(f"ERROR loading switch: {e}")
