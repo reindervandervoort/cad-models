@@ -32,12 +32,19 @@ with open(input_file, 'r') as f:
 
 hand_diameter = params.get('handDiameter', 192)
 hand_radius = hand_diameter / 2
+roll_diameter = params.get('rollDiameter', 192)
+roll_radius = roll_diameter / 2
 key_count = params.get('keyCount', 5)
+row_count = params.get('rowCount', 6)
+row_spacing = params.get('rowSpacing', 30)
+spiral_start_angle = params.get('spiralStartAngle', math.pi)
 u = params.get('u', 18)
 pitch_angle = params.get('pitch', 45)
 switch_offset = params.get('switchOffset', 1)  # mm below keycap top
 
-print(f"\nParameters: keyCount={key_count}, u={u}mm, pitch={pitch_angle}°, hand_radius={hand_radius}mm, switchOffset={switch_offset}mm")
+print(f"\nParameters: keyCount={key_count}, rowCount={row_count}, u={u}mm, pitch={pitch_angle}°")
+print(f"  hand_radius={hand_radius}mm, roll_radius={roll_radius}mm, switchOffset={switch_offset}mm")
+print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad")
 
 # Helper function to calculate placement for any component
 def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
@@ -174,6 +181,102 @@ def create_golden_spiral(start_diameter, arc_length_radians, tube_radius, center
     return spiral_tube
 
 
+def spiral_radius_at_angle(theta, start_diameter):
+    """Calculate radius of golden spiral at given angle theta."""
+    a = start_diameter / 2
+    return a * (PHI ** (-theta / (math.pi / 2)))
+
+
+def spiral_position_at_angle(theta, start_diameter, center=FreeCAD.Vector(0, 0, 0)):
+    """Calculate 3D position on spiral at given angle in X-Z plane."""
+    r = spiral_radius_at_angle(theta, start_diameter)
+    x = -r * math.cos(theta)  # Negative for horizontal flip
+    y = 0
+    z = r * math.sin(theta)
+    return FreeCAD.Vector(center.x + x, center.y + y, center.z + z)
+
+
+def spiral_tangent_at_angle(theta, start_diameter):
+    """
+    Calculate tangent vector to the spiral at given angle.
+    For r(θ) = a × φ^(-θ/(π/2)), the tangent in polar coords is:
+    dr/dθ = -a × ln(φ)/(π/2) × φ^(-θ/(π/2))
+    """
+    a = start_diameter / 2
+    r = a * (PHI ** (-theta / (math.pi / 2)))
+    dr_dtheta = -a * math.log(PHI) / (math.pi / 2) * (PHI ** (-theta / (math.pi / 2)))
+
+    # Convert polar tangent to Cartesian (for flipped spiral in X-Z plane)
+    # dx/dθ = -dr/dθ * cos(θ) + r * sin(θ)  (with flip)
+    # dz/dθ = dr/dθ * sin(θ) + r * cos(θ)
+    dx_dtheta = -dr_dtheta * math.cos(theta) + r * math.sin(theta)
+    dz_dtheta = dr_dtheta * math.sin(theta) + r * math.cos(theta)
+
+    tangent = FreeCAD.Vector(dx_dtheta, 0, dz_dtheta)
+    tangent.normalize()
+    return tangent
+
+
+def spiral_normal_at_angle(theta, start_diameter):
+    """
+    Calculate outward normal vector to the spiral at given angle (in X-Z plane).
+    Normal is perpendicular to tangent, pointing away from center.
+    """
+    tangent = spiral_tangent_at_angle(theta, start_diameter)
+    # In X-Z plane, Y-axis is perpendicular to the plane
+    y_axis = FreeCAD.Vector(0, 1, 0)
+    # Normal = tangent × y_axis (right-hand rule)
+    normal = tangent.cross(y_axis)
+    normal.normalize()
+    return normal
+
+
+def find_theta_at_arc_distance(start_theta, arc_distance, start_diameter, tolerance=0.01, max_iterations=100):
+    """
+    Find the angle theta along the spiral where the arc length from start_theta equals arc_distance.
+    Uses numerical integration to compute arc length.
+
+    Args:
+        start_theta: Starting angle in radians
+        arc_distance: Target arc length in mm
+        start_diameter: Initial diameter of spiral
+        tolerance: Convergence tolerance in mm
+        max_iterations: Maximum iterations for binary search
+
+    Returns:
+        Angle theta in radians where arc length equals arc_distance
+    """
+    def arc_length_from_start(end_theta, num_segments=50):
+        """Numerically integrate arc length from start_theta to end_theta."""
+        length = 0.0
+        for i in range(num_segments):
+            t1 = start_theta + (end_theta - start_theta) * i / num_segments
+            t2 = start_theta + (end_theta - start_theta) * (i + 1) / num_segments
+            p1 = spiral_position_at_angle(t1, start_diameter)
+            p2 = spiral_position_at_angle(t2, start_diameter)
+            length += p1.distanceToPoint(p2)
+        return length
+
+    # Binary search for the correct theta
+    theta_min = start_theta
+    theta_max = start_theta + 2 * math.pi  # Search up to one full rotation ahead
+
+    for iteration in range(max_iterations):
+        theta_mid = (theta_min + theta_max) / 2
+        arc_len = arc_length_from_start(theta_mid)
+
+        if abs(arc_len - arc_distance) < tolerance:
+            return theta_mid
+
+        if arc_len < arc_distance:
+            theta_min = theta_mid
+        else:
+            theta_max = theta_mid
+
+    # Return best estimate if not converged
+    return (theta_min + theta_max) / 2
+
+
 # Load and prepare base keycap mesh
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 print(f"\nLoading keycap: {keycap_stl}")
@@ -225,34 +328,91 @@ except Exception as e:
     switch_shape = switch_base.fuse(switch_top)
     print("Using parametric fallback switch shape")
 
-# Create keycaps and switches
-for i in range(key_count):
-    print(f"\n=== Key {i+1}/{key_count} ===")
+# Calculate row positions along the spiral
+print(f"\n=== Calculating {row_count} row positions along spiral ===")
+row_thetas = [spiral_start_angle]
+for row_idx in range(1, row_count):
+    arc_dist = row_spacing * row_idx
+    theta = find_theta_at_arc_distance(spiral_start_angle, arc_dist, hand_diameter)
+    row_thetas.append(theta)
+    print(f"Row {row_idx + 1}: theta={theta:.4f} rad ({math.degrees(theta):.1f}°), arc_dist={arc_dist}mm")
 
-    # Calculate base placement (same for both keycap and switch)
-    base_placement, angle = calculate_placement(i, key_count, u, hand_radius, pitch_angle)
+# Create keycaps and switches for all rows
+total_keys = 0
+for row_idx in range(row_count):
+    theta = row_thetas[row_idx]
+    print(f"\n=== Row {row_idx + 1}/{row_count} at theta={theta:.4f} rad ===")
 
-    # Create keycap at base placement
-    keycap_obj = doc.addObject("Part::Feature", f"Keycap_{i+1:02d}")
-    keycap_obj.Shape = keycap_shape
-    keycap_obj.Placement = base_placement
+    # Get spiral position and orientation at this angle
+    spiral_pos = spiral_position_at_angle(theta, hand_diameter)
+    tangent = spiral_tangent_at_angle(theta, hand_diameter)  # Y-axis direction (row direction)
+    normal = spiral_normal_at_angle(theta, hand_diameter)    # Z-axis direction (perpendicular to spiral)
 
-    # Create switch offset in LOCAL coordinate system
-    # The switch needs to be 6mm below in the -Z direction of the rotated coordinate system
-    local_offset = FreeCAD.Vector(0, 0, -switch_offset)
-    # Rotate the offset vector by the same rotation as the keycap
-    global_offset = base_placement.Rotation.multVec(local_offset)
-    # Create switch placement: same rotation, but offset position
-    switch_pos = base_placement.Base.add(global_offset)
-    switch_placement = FreeCAD.Placement(switch_pos, base_placement.Rotation)
+    # Build coordinate frame: X = Z × Y (right-hand rule)
+    z_axis = normal
+    y_axis = tangent
+    x_axis = z_axis.cross(y_axis)
+    x_axis.normalize()
 
-    switch_obj = doc.addObject("Part::Feature", f"Switch_{i+1:02d}")
-    switch_obj.Shape = switch_shape
-    switch_obj.Placement = switch_placement
+    # Create rotation matrix from local axes
+    # FreeCAD Placement needs rotation from global to local frame
+    # We have local axes in global coordinates, so create rotation from them
+    local_to_global = FreeCAD.Rotation(
+        FreeCAD.Matrix(
+            x_axis.x, y_axis.x, z_axis.x, 0,
+            x_axis.y, y_axis.y, z_axis.y, 0,
+            x_axis.z, y_axis.z, z_axis.z, 0,
+            0, 0, 0, 1
+        )
+    )
 
-    print(f"  Arc angle: {angle:.2f}°")
-    print(f"  Keycap pos: ({base_placement.Base.x:.1f}, {base_placement.Base.y:.1f}, {base_placement.Base.z:.1f})")
-    print(f"  Switch pos: ({switch_placement.Base.x:.1f}, {switch_placement.Base.y:.1f}, {switch_placement.Base.z:.1f})")
+    print(f"  Spiral pos: ({spiral_pos.x:.1f}, {spiral_pos.y:.1f}, {spiral_pos.z:.1f})")
+    print(f"  Tangent: ({tangent.x:.3f}, {tangent.y:.3f}, {tangent.z:.3f})")
+    print(f"  Normal: ({normal.x:.3f}, {normal.y:.3f}, {normal.z:.3f})")
+
+    # Create keys in this row
+    for key_idx in range(key_count):
+        # Calculate placement within the row's local coordinate system
+        local_placement, arc_angle = calculate_placement(key_idx, key_count, u, roll_radius, pitch_angle)
+
+        # Transform local placement to global coordinates
+        # The local placement is in a coordinate system where:
+        # - Origin is at the row center
+        # - Y-axis is along the row
+        # - Z-axis is perpendicular to the row (away from center of curvature)
+        # We need to:
+        # 1. Apply the local rotation
+        # 2. Offset by the spiral position
+        # 3. Apply the spiral orientation
+
+        # Combine rotations: first the local key rotation, then the spiral orientation
+        global_rotation = local_to_global.multiply(local_placement.Rotation)
+
+        # Transform local position to global
+        global_offset = local_to_global.multVec(local_placement.Base)
+        global_position = spiral_pos.add(global_offset)
+
+        # Create final placement
+        final_placement = FreeCAD.Placement(global_position, global_rotation)
+
+        # Create keycap
+        keycap_obj = doc.addObject("Part::Feature", f"Keycap_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
+        keycap_obj.Shape = keycap_shape
+        keycap_obj.Placement = final_placement
+
+        # Create switch with offset
+        local_switch_offset = FreeCAD.Vector(0, 0, -switch_offset)
+        global_switch_offset = global_rotation.multVec(local_switch_offset)
+        switch_position = global_position.add(global_switch_offset)
+        switch_placement = FreeCAD.Placement(switch_position, global_rotation)
+
+        switch_obj = doc.addObject("Part::Feature", f"Switch_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
+        switch_obj.Shape = switch_shape
+        switch_obj.Placement = switch_placement
+
+        total_keys += 1
+
+    print(f"  Created {key_count} keys in row {row_idx + 1}")
 
 # Create golden spiral
 # Parameters:
@@ -274,4 +434,5 @@ spiral_obj = doc.addObject("Part::Feature", "GoldenSpiral")
 spiral_obj.Shape = spiral_shape
 
 doc.recompute()
-print(f"\nSUCCESS: Created {key_count} keycaps, {key_count} switches, and 1 golden spiral ({len(doc.Objects)} objects total)")
+print(f"\nSUCCESS: Created {row_count} rows with {key_count} keys each ({total_keys} total keys)")
+print(f"  {total_keys} keycaps + {total_keys} switches + 1 golden spiral = {len(doc.Objects)} objects total")
