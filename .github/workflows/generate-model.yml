@@ -39,7 +39,7 @@ jobs:
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
             echo "change_desc=Manual trigger" >> $GITHUB_OUTPUT
           else
-            CHANGED_FILE=$(git diff --name-only HEAD~1 HEAD | grep 'models/.*/.*\.py' | head -1)
+            CHANGED_FILE=$(git diff --name-only HEAD~1 HEAD | grep 'models/' | head -1)
             if [ -n "$CHANGED_FILE" ]; then
               MODEL_NAME=$(echo "$CHANGED_FILE" | cut -d'/' -f2)
               echo "model_name=$MODEL_NAME" >> $GITHUB_OUTPUT
