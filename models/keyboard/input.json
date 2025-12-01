@@ -4,7 +4,7 @@
   "keyHeight": 6,
   "keyCount": 5,
   "switchOffset": 1,
-  "pitch": -30,
+  "pitch": 30,
   "handDiameter": 192,
   "rollDiameter": 192,
   "rowCount": 6,
