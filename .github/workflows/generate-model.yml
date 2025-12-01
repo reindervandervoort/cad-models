@@ -159,6 +159,31 @@ jobs:
           SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' | tr '\n' ',' | sed 's/,$//' || echo "")
           echo "screenshots=$SCREENSHOTS" >> $GITHUB_OUTPUT
 
+      - name: Download screenshots
+        if: steps.wait.outputs.status == 'success'
+        id: download-screenshots
+        run: |
+          MODEL="${{ steps.vars.outputs.model_name }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+
+          mkdir -p screenshots
+
+          # Download all screenshots from S3
+          aws s3 sync "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" screenshots/ 2>/dev/null || true
+
+          # Count downloaded files
+          COUNT=$(ls -1 screenshots/*.png 2>/dev/null | wc -l)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Downloaded $COUNT screenshot(s)"
+
+      - name: Upload screenshots as artifact
+        if: steps.download-screenshots.outputs.count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-screenshots-${{ steps.vars.outputs.model_name }}-${{ steps.vars.outputs.version }}
+          path: screenshots/*.png
+          retention-days: 7
+
       - name: Generate summary
         if: always()
         run: |
@@ -177,21 +202,17 @@ jobs:
             echo "### Screenshots" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
 
-            # List screenshots from S3
-            SCREENSHOTS=$(aws s3 ls "s3://${{ secrets.S3_BUCKET }}/screenshots/${MODEL}/${VERSION}/" 2>/dev/null | awk '{print $4}' || echo "")
+            if [ "${{ steps.download-screenshots.outputs.count }}" -gt 0 ]; then
+              echo "Screenshots are available as [workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Downloaded screenshots:**" >> $GITHUB_STEP_SUMMARY
 
-            if [ -n "$SCREENSHOTS" ]; then
-              echo "| View | Image |" >> $GITHUB_STEP_SUMMARY
-              echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-
-              for SCREENSHOT in $SCREENSHOTS; do
-                NAME="${SCREENSHOT%.png}"
-                S3_KEY="screenshots/${MODEL}/${VERSION}/${SCREENSHOT}"
-
-                # Generate presigned URL that expires in 1 week (604800 seconds)
-                URL=$(aws s3 presign "s3://${{ secrets.S3_BUCKET }}/${S3_KEY}" --expires-in 604800)
-
-                echo "| $NAME | ![$NAME]($URL) |" >> $GITHUB_STEP_SUMMARY
+              # List screenshot files
+              for SCREENSHOT in screenshots/*.png; do
+                if [ -f "$SCREENSHOT" ]; then
+                  NAME=$(basename "$SCREENSHOT" .png)
+                  echo "- $NAME" >> $GITHUB_STEP_SUMMARY
+                fi
               done
             else
               echo "_No screenshots available_" >> $GITHUB_STEP_SUMMARY
