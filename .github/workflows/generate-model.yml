@@ -186,7 +186,11 @@ jobs:
 
               for SCREENSHOT in $SCREENSHOTS; do
                 NAME="${SCREENSHOT%.png}"
-                URL="${CLOUDFRONT_URL}/screenshots/${MODEL}/${VERSION}/${SCREENSHOT}"
+                S3_KEY="screenshots/${MODEL}/${VERSION}/${SCREENSHOT}"
+
+                # Generate presigned URL that expires in 1 week (604800 seconds)
+                URL=$(aws s3 presign "s3://${{ secrets.S3_BUCKET }}/${S3_KEY}" --expires-in 604800)
+
                 echo "| $NAME | ![$NAME]($URL) |" >> $GITHUB_STEP_SUMMARY
               done
             else
