@@ -1,8 +1,12 @@
 # CAD Models Repository - Agent Instructions
 
+## CRITICAL RULES
+
+**NEVER sleep for more than 10 seconds.** Use polling loops with short intervals instead of long sleeps. The user's time is valuable.
+
 ## Purpose
 
-This repository contains FreeCAD Python scripts that generate parametric 3D models. When you push changes to `models/**/*.py`, GitHub Actions automatically triggers model generation via an SQS-based job queue system.
+This repository contains FreeCAD Python scripts that generate parametric 3D models. When you push changes to `models/**/*`, GitHub Actions automatically triggers model generation via an SQS-based job queue system.
 
 ## Architecture Overview
 
