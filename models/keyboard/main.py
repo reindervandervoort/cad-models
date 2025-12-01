@@ -343,20 +343,27 @@ for row_idx in range(row_count):
     theta = row_thetas[row_idx]
     print(f"\n=== Row {row_idx + 1}/{row_count} at theta={theta:.4f} rad ===")
 
-    # Get spiral position and orientation at this angle
+    # Get spiral position at this angle
     spiral_pos = spiral_position_at_angle(theta, hand_diameter)
-    tangent = spiral_tangent_at_angle(theta, hand_diameter)  # Y-axis direction (row direction)
-    normal = spiral_normal_at_angle(theta, hand_diameter)    # Z-axis direction (perpendicular to spiral)
+    normal = spiral_normal_at_angle(theta, hand_diameter)    # Normal to spiral (for offset direction)
 
-    # Build coordinate frame: X = Z × Y (right-hand rule)
-    z_axis = normal
-    y_axis = tangent
+    # Use CONSISTENT orientation for all rows (not tangent-based)
+    # All rows should be parallel, oriented in the same direction
+    # Y-axis: Global Y direction (row runs left-to-right in global coords)
+    # Z-axis: Use spiral normal for perpendicular direction
+    # X-axis: Complete the right-hand coordinate system
+
+    y_axis = FreeCAD.Vector(0, 1, 0)  # Fixed global Y direction for all rows
+    z_axis = normal                    # Perpendicular to spiral (points outward)
     x_axis = z_axis.cross(y_axis)
     x_axis.normalize()
 
+    # Re-orthogonalize to ensure perfect perpendicularity
+    z_axis = x_axis.cross(y_axis)
+    z_axis.normalize()
+
     # Create rotation matrix from local axes
-    # FreeCAD Placement needs rotation from global to local frame
-    # We have local axes in global coordinates, so create rotation from them
+    # All rows will have the same orientation, just different positions along the spiral
     local_to_global = FreeCAD.Rotation(
         FreeCAD.Matrix(
             x_axis.x, y_axis.x, z_axis.x, 0,
@@ -367,8 +374,8 @@ for row_idx in range(row_count):
     )
 
     print(f"  Spiral pos: ({spiral_pos.x:.1f}, {spiral_pos.y:.1f}, {spiral_pos.z:.1f})")
-    print(f"  Tangent: ({tangent.x:.3f}, {tangent.y:.3f}, {tangent.z:.3f})")
     print(f"  Normal: ({normal.x:.3f}, {normal.y:.3f}, {normal.z:.3f})")
+    print(f"  Row orientation: Y-axis={y_axis}, Z-axis=({z_axis.x:.3f}, {z_axis.y:.3f}, {z_axis.z:.3f})")
 
     # Create keys in this row
     for key_idx in range(key_count):
