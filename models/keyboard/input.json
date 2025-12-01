@@ -8,7 +8,7 @@
   "handDiameter": 192,
   "rollDiameter": 192,
   "rowCount": 6,
-  "rowSpacing": 30,
+  "rowSpacing": 20,
   "spiralStartAngle": 3.14159,
   "horizontalSpace": 2
 }
