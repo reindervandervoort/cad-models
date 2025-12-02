@@ -328,6 +328,38 @@ except Exception as e:
     switch_shape = switch_base.fuse(switch_top)
     print("Using parametric fallback switch shape")
 
+# Load and prepare base switchplate mesh
+switchplate_stl = os.path.join(script_dir, "switchplate.stl")
+print(f"Loading switchplate: {switchplate_stl}")
+
+try:
+    switchplate_mesh = Mesh.Mesh(switchplate_stl)
+    switchplate_bbox = switchplate_mesh.BoundBox
+
+    print(f"Switchplate original bbox: X[{switchplate_bbox.XMin:.1f}, {switchplate_bbox.XMax:.1f}] Y[{switchplate_bbox.YMin:.1f}, {switchplate_bbox.YMax:.1f}] Z[{switchplate_bbox.ZMin:.1f}, {switchplate_bbox.ZMax:.1f}]")
+
+    # Center the switchplate mesh horizontally, top at Z=0
+    switchplate_offset_x = -(switchplate_bbox.XMin + switchplate_bbox.XMax) / 2
+    switchplate_offset_y = -(switchplate_bbox.YMin + switchplate_bbox.YMax) / 2
+    switchplate_offset_z = -switchplate_bbox.ZMax
+
+    print(f"Switchplate offset: ({switchplate_offset_x:.1f}, {switchplate_offset_y:.1f}, {switchplate_offset_z:.1f})")
+
+    switchplate_mesh.translate(switchplate_offset_x, switchplate_offset_y, switchplate_offset_z)
+
+    # Convert using same method as keycap
+    switchplate_shape = Part.Shape()
+    switchplate_shape.makeShapeFromMesh(switchplate_mesh.Topology, 0.1)
+
+    print(f"Switchplate shape created successfully with {len(switchplate_shape.Faces)} faces")
+
+except Exception as e:
+    print(f"ERROR loading switchplate: {e}")
+    import traceback
+    traceback.print_exc()
+    switchplate_shape = None
+    print("Switchplate will not be included")
+
 # Calculate row positions along the spiral
 print(f"\n=== Calculating {row_count} row positions along spiral ===")
 row_thetas = [spiral_start_angle]
@@ -417,6 +449,17 @@ for row_idx in range(row_count):
         switch_obj.Shape = switch_shape
         switch_obj.Placement = switch_placement
 
+        # Create switchplate with offset (17.5mm below keycap top)
+        if switchplate_shape is not None:
+            local_switchplate_offset = FreeCAD.Vector(0, 0, -17.5)
+            global_switchplate_offset = global_rotation.multVec(local_switchplate_offset)
+            switchplate_position = global_position.add(global_switchplate_offset)
+            switchplate_placement = FreeCAD.Placement(switchplate_position, global_rotation)
+
+            switchplate_obj = doc.addObject("Part::Feature", f"Switchplate_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
+            switchplate_obj.Shape = switchplate_shape
+            switchplate_obj.Placement = switchplate_placement
+
         total_keys += 1
 
     print(f"  Created {key_count} keys in row {row_idx + 1}")
@@ -442,4 +485,7 @@ spiral_obj.Shape = spiral_shape
 
 doc.recompute()
 print(f"\nSUCCESS: Created {row_count} rows with {key_count} keys each ({total_keys} total keys)")
-print(f"  {total_keys} keycaps + {total_keys} switches + 1 golden spiral = {len(doc.Objects)} objects total")
+if switchplate_shape is not None:
+    print(f"  {total_keys} keycaps + {total_keys} switches + {total_keys} switchplates + 1 golden spiral = {len(doc.Objects)} objects total")
+else:
+    print(f"  {total_keys} keycaps + {total_keys} switches + 1 golden spiral = {len(doc.Objects)} objects total")
