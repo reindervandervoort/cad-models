@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Keyboard Row: Keycaps with Switches on Circular Arc
-Keycaps and switches positioned on curved row with pitch and roll
+Keyboard: Left-hand split 60% with embossed labels
+Variable key widths, multiple rows on golden spiral
 
-Version 2.0: Refined switch positioning and mesh repair
+Version 3.0: Layout-based configuration with embossed text
 """
 
 import FreeCAD
 import Part
 import Mesh
+import Draft
 import os
 import math
 import json
@@ -16,7 +17,7 @@ import json
 # Golden ratio constant
 PHI = (1 + math.sqrt(5)) / 2  # Approximately 1.618...
 
-print("=== Keyboard row with keycaps and switches ===")
+print("=== Left-hand split keyboard with embossed labels ===")
 
 # Document setup
 if 'doc' not in dir():
@@ -34,20 +35,127 @@ hand_diameter = params.get('handDiameter', 192)
 hand_radius = hand_diameter / 2
 roll_diameter = params.get('rollDiameter', 192)
 roll_radius = roll_diameter / 2
-key_count = params.get('keyCount', 5)
-row_count = params.get('rowCount', 6)
 row_spacing = params.get('rowSpacing', 30)
 spiral_start_angle = params.get('spiralStartAngle', math.pi)
-u = params.get('u', 18)
+u = params.get('u', 18)  # 1u key size in mm
 pitch_angle = params.get('pitch', 45)
-switch_offset = params.get('switchOffset', 1)  # mm below keycap top
-mount_offset = params.get('mountOffset', 17.5)  # mm below keycap top for switchplate
+switch_offset = params.get('switchOffset', 1)
+mount_offset = params.get('mountOffset', 17.5)
+text_height = params.get('textHeight', 3)  # mm tall
+text_depth = params.get('textDepth', 0.5)  # mm emboss depth
+layout = params.get('layout', [])
 
-print(f"\nParameters: keyCount={key_count}, rowCount={row_count}, u={u}mm, pitch={pitch_angle}°")
-print(f"  hand_radius={hand_radius}mm, roll_radius={roll_radius}mm, switchOffset={switch_offset}mm")
-print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad, mountOffset={mount_offset}mm")
+print(f"\nParameters: u={u}mm, pitch={pitch_angle}°, rows={len(layout)}")
+print(f"  hand_radius={hand_radius}mm, roll_radius={roll_radius}mm")
+print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad")
+print(f"  switchOffset={switch_offset}mm, mountOffset={mount_offset}mm")
+print(f"  textHeight={text_height}mm, textDepth={text_depth}mm")
 
-# Helper function to calculate placement for any component
+
+def create_embossed_text(label, keycap_width_mm, text_height_mm, text_depth_mm):
+    """
+    Create embossed text for a keycap.
+
+    Args:
+        label: Text to emboss
+        keycap_width_mm: Width of keycap in mm
+        text_height_mm: Height of text in mm
+        text_depth_mm: Depth of embossing in mm
+
+    Returns:
+        Part.Shape of the embossed text, or None if failed
+    """
+    try:
+        # Create text shape using Draft module
+        font_file = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+        if not os.path.exists(font_file):
+            # Fallback to any available font
+            font_file = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+        # Create the text string shape
+        text_obj = Draft.makeShapeString(
+            String=label,
+            FontFile=font_file,
+            Size=text_height_mm,
+            Tracking=0
+        )
+
+        if not text_obj or not hasattr(text_obj, 'Shape'):
+            print(f"  WARNING: Could not create text shape for '{label}'")
+            return None
+
+        text_shape = text_obj.Shape
+        doc.removeObject(text_obj.Name)  # Clean up temporary object
+
+        # Get text bounding box to center it
+        bbox = text_shape.BoundBox
+        text_width = bbox.XMax - bbox.XMin
+        text_actual_height = bbox.YMax - bbox.YMin
+
+        # Scale to fit keycap (leave some margin)
+        max_text_width = keycap_width_mm * 0.7
+        if text_width > max_text_width:
+            scale_factor = max_text_width / text_width
+            text_shape = text_shape.scale(scale_factor)
+            bbox = text_shape.BoundBox
+            text_width = bbox.XMax - bbox.XMin
+            text_actual_height = bbox.YMax - bbox.YMin
+
+        # Center the text
+        offset_x = -text_width / 2
+        offset_y = -text_actual_height / 2
+        text_shape.translate(FreeCAD.Vector(offset_x, offset_y, 0))
+
+        # Extrude the text to create 3D embossing
+        text_3d = text_shape.extrude(FreeCAD.Vector(0, 0, text_depth_mm))
+
+        return text_3d
+
+    except Exception as e:
+        print(f"  WARNING: Failed to create text '{label}': {e}")
+        return None
+
+
+def create_keycap_with_label(base_keycap_shape, label, key_width_u, text_height_mm, text_depth_mm, u_mm):
+    """
+    Create a keycap with embossed label by scaling base keycap and adding text.
+
+    Args:
+        base_keycap_shape: Base keycap shape (1u)
+        label: Text label
+        key_width_u: Key width in units (1.0, 1.5, 2.0, etc.)
+        text_height_mm: Height of text
+        text_depth_mm: Depth of embossing
+        u_mm: Size of 1u in mm
+
+    Returns:
+        Part.Shape of the keycap with label
+    """
+    # Scale keycap horizontally if needed (Y-axis in our coordinate system)
+    if abs(key_width_u - 1.0) > 0.01:
+        # Scale only in Y direction
+        scale_matrix = FreeCAD.Matrix()
+        scale_matrix.scale(FreeCAD.Vector(1.0, key_width_u, 1.0))
+        keycap = base_keycap_shape.transformGeometry(scale_matrix)
+    else:
+        keycap = base_keycap_shape.copy()
+
+    # Create embossed text
+    if label:
+        text_shape = create_embossed_text(label, key_width_u * u_mm, text_height_mm, text_depth_mm)
+        if text_shape:
+            # Position text on top of keycap (slightly below surface for embossing)
+            text_shape.translate(FreeCAD.Vector(0, 0, -text_depth_mm * 0.5))
+
+            # Fuse text with keycap
+            try:
+                keycap = keycap.fuse(text_shape)
+            except Exception as e:
+                print(f"  WARNING: Could not fuse text '{label}': {e}")
+
+    return keycap
+
+
 def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
     """
     Calculate placement for a component on the circular arc.
@@ -80,105 +188,82 @@ def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
     return FreeCAD.Placement(FreeCAD.Vector(pos_x, pos_y, pos_z), combined_rot), keycap_angle_deg
 
 
-def create_golden_spiral(start_diameter, arc_length_radians, tube_radius, center, plane_normal='xz', num_segments=100):
+def calculate_row_layout(keys, u_mm):
     """
-    Create a golden spiral as a swept tube.
+    Calculate the position offsets and total width for a row of keys.
 
     Args:
-        start_diameter: Initial diameter of the spiral
-        arc_length_radians: Total angular length in radians (e.g., 2*pi for one full turn)
-        tube_radius: Radius of the circular cross-section tube
-        center: FreeCAD.Vector for the center of the spiral
-        plane_normal: Plane orientation ('xz' for X-Z plane, 'xy' for X-Y plane, etc.)
-        num_segments: Number of segments to approximate the spiral curve
+        keys: List of key dicts with 'width' and 'label'
+        u_mm: Size of 1u in mm
 
     Returns:
-        Part.Shape of the spiral tube
+        (positions, total_width) where positions is list of (offset, width) tuples
     """
-    print(f"\n=== Creating Golden Spiral ===")
-    print(f"Start diameter: {start_diameter}mm")
-    print(f"Arc length: {arc_length_radians:.3f} radians ({math.degrees(arc_length_radians):.1f}°)")
-    print(f"Tube radius: {tube_radius}mm")
-    print(f"Center: ({center.x}, {center.y}, {center.z})")
-    print(f"Plane: {plane_normal}")
+    positions = []
+    current_offset = 0
 
-    # Starting radius
+    for key in keys:
+        width_u = key.get('width', 1.0)
+        width_mm = width_u * u_mm
+
+        # Center of this key is at current_offset + width/2
+        key_center = current_offset + width_mm / 2
+        positions.append((key_center, width_u))
+
+        # Next key starts after this one
+        current_offset += width_mm
+
+    total_width = current_offset
+
+    # Center the entire row (adjust all positions)
+    center_offset = total_width / 2
+    positions = [(pos - center_offset, width) for pos, width in positions]
+
+    return positions, total_width
+
+
+def create_golden_spiral(start_diameter, arc_length_radians, tube_radius, center, plane_normal='xz', num_segments=100):
+    """Create a golden spiral as a swept tube."""
+    print(f"\n=== Creating Golden Spiral ===")
+    print(f"Start diameter: {start_diameter}mm, Arc length: {arc_length_radians:.3f} rad")
+
     a = start_diameter / 2
 
-    # Generate spiral points using golden spiral formula: r(θ) = a × φ^(-θ/(π/2))
+    # Generate spiral points
     points = []
     for i in range(num_segments + 1):
         theta = (arc_length_radians / num_segments) * i
-
-        # Golden spiral radius formula
         r = a * (PHI ** (-theta / (math.pi / 2)))
 
-        # Calculate point coordinates based on plane orientation
         if plane_normal.lower() == 'xz':
-            # Spiral in X-Z plane (perpendicular to Y-axis)
-            # Flipped horizontally by negating x
             x = -r * math.cos(theta)
             y = 0
-            z = r * math.sin(theta)
-        elif plane_normal.lower() == 'xy':
-            # Spiral in X-Y plane (perpendicular to Z-axis)
-            x = r * math.cos(theta)
-            y = r * math.sin(theta)
-            z = 0
-        elif plane_normal.lower() == 'yz':
-            # Spiral in Y-Z plane (perpendicular to X-axis)
-            x = 0
-            y = r * math.cos(theta)
             z = r * math.sin(theta)
         else:
             raise ValueError(f"Unknown plane orientation: {plane_normal}")
 
-        # Offset by center
         point = FreeCAD.Vector(center.x + x, center.y + y, center.z + z)
         points.append(point)
 
-    # Create the spiral path using BSpline
+    # Create spiral curve
     spiral_curve = Part.BSplineCurve()
     spiral_curve.interpolate(points)
     spiral_edge = spiral_curve.toShape()
 
-    # Create circular cross-section for the tube
-    circle_center = points[0]
-
-    # Calculate the tangent at the start to orient the circle perpendicular to the curve
+    # Create tube cross-section
     tangent = points[1] - points[0]
     tangent.normalize()
-
-    # Create a normal vector perpendicular to the tangent
-    if plane_normal.lower() == 'xz':
-        # For XZ plane, use Y-axis as reference
-        reference = FreeCAD.Vector(0, 1, 0)
-    elif plane_normal.lower() == 'xy':
-        # For XY plane, use Z-axis as reference
-        reference = FreeCAD.Vector(0, 0, 1)
-    else:  # yz
-        # For YZ plane, use X-axis as reference
-        reference = FreeCAD.Vector(1, 0, 0)
-
-    # Cross product to get perpendicular vector
+    reference = FreeCAD.Vector(0, 1, 0)
     normal = tangent.cross(reference)
-    if normal.Length < 0.001:
-        # If tangent is parallel to reference, use different reference
-        reference = FreeCAD.Vector(1, 0, 0) if plane_normal.lower() != 'yz' else FreeCAD.Vector(0, 1, 0)
-        normal = tangent.cross(reference)
     normal.normalize()
 
-    # Create circle perpendicular to the starting tangent
-    circle = Part.makeCircle(tube_radius, circle_center, normal)
+    circle = Part.makeCircle(tube_radius, points[0], normal)
     circle_wire = Part.Wire(circle)
 
-    # Sweep the circle along the spiral path to create the tube
+    # Sweep to create tube
     spiral_tube = Part.Wire([spiral_edge]).makePipeShell([circle_wire], True, False)
 
-    end_radius = a * (PHI ** (-arc_length_radians / (math.pi / 2)))
-    print(f"End radius: {end_radius:.3f}mm (shrunk by factor of {a/end_radius:.3f})")
     print(f"Golden spiral created with {num_segments} segments")
-
     return spiral_tube
 
 
@@ -191,25 +276,18 @@ def spiral_radius_at_angle(theta, start_diameter):
 def spiral_position_at_angle(theta, start_diameter, center=FreeCAD.Vector(0, 0, 0)):
     """Calculate 3D position on spiral at given angle in X-Z plane."""
     r = spiral_radius_at_angle(theta, start_diameter)
-    x = -r * math.cos(theta)  # Negative for horizontal flip
+    x = -r * math.cos(theta)
     y = 0
     z = r * math.sin(theta)
     return FreeCAD.Vector(center.x + x, center.y + y, center.z + z)
 
 
 def spiral_tangent_at_angle(theta, start_diameter):
-    """
-    Calculate tangent vector to the spiral at given angle.
-    For r(θ) = a × φ^(-θ/(π/2)), the tangent in polar coords is:
-    dr/dθ = -a × ln(φ)/(π/2) × φ^(-θ/(π/2))
-    """
+    """Calculate tangent vector to the spiral at given angle."""
     a = start_diameter / 2
     r = a * (PHI ** (-theta / (math.pi / 2)))
     dr_dtheta = -a * math.log(PHI) / (math.pi / 2) * (PHI ** (-theta / (math.pi / 2)))
 
-    # Convert polar tangent to Cartesian (for flipped spiral in X-Z plane)
-    # dx/dθ = -dr/dθ * cos(θ) + r * sin(θ)  (with flip)
-    # dz/dθ = dr/dθ * sin(θ) + r * cos(θ)
     dx_dtheta = -dr_dtheta * math.cos(theta) + r * math.sin(theta)
     dz_dtheta = dr_dtheta * math.sin(theta) + r * math.cos(theta)
 
@@ -219,36 +297,17 @@ def spiral_tangent_at_angle(theta, start_diameter):
 
 
 def spiral_normal_at_angle(theta, start_diameter):
-    """
-    Calculate outward normal vector to the spiral at given angle (in X-Z plane).
-    Normal is perpendicular to tangent, pointing away from center.
-    """
+    """Calculate outward normal vector to the spiral at given angle."""
     tangent = spiral_tangent_at_angle(theta, start_diameter)
-    # In X-Z plane, Y-axis is perpendicular to the plane
     y_axis = FreeCAD.Vector(0, 1, 0)
-    # Normal = tangent × y_axis (right-hand rule)
     normal = tangent.cross(y_axis)
     normal.normalize()
     return normal
 
 
 def find_theta_at_arc_distance(start_theta, arc_distance, start_diameter, tolerance=0.01, max_iterations=100):
-    """
-    Find the angle theta along the spiral where the arc length from start_theta equals arc_distance.
-    Uses numerical integration to compute arc length.
-
-    Args:
-        start_theta: Starting angle in radians
-        arc_distance: Target arc length in mm
-        start_diameter: Initial diameter of spiral
-        tolerance: Convergence tolerance in mm
-        max_iterations: Maximum iterations for binary search
-
-    Returns:
-        Angle theta in radians where arc length equals arc_distance
-    """
+    """Find angle theta along spiral where arc length from start_theta equals arc_distance."""
     def arc_length_from_start(end_theta, num_segments=50):
-        """Numerically integrate arc length from start_theta to end_theta."""
         length = 0.0
         for i in range(num_segments):
             t1 = start_theta + (end_theta - start_theta) * i / num_segments
@@ -258,9 +317,8 @@ def find_theta_at_arc_distance(start_theta, arc_distance, start_diameter, tolera
             length += p1.distanceToPoint(p2)
         return length
 
-    # Binary search for the correct theta
     theta_min = start_theta
-    theta_max = start_theta + 2 * math.pi  # Search up to one full rotation ahead
+    theta_max = start_theta + 2 * math.pi
 
     for iteration in range(max_iterations):
         theta_mid = (theta_min + theta_max) / 2
@@ -274,11 +332,10 @@ def find_theta_at_arc_distance(start_theta, arc_distance, start_diameter, tolera
         else:
             theta_max = theta_mid
 
-    # Return best estimate if not converged
     return (theta_min + theta_max) / 2
 
 
-# Load and prepare base keycap mesh
+# Load base keycap mesh
 keycap_stl = os.path.join(script_dir, "kailh_choc_low_profile_keycap.stl")
 print(f"\nLoading keycap: {keycap_stl}")
 
@@ -291,10 +348,12 @@ offset_y = -(bbox.YMin + bbox.YMax) / 2
 offset_z = -bbox.ZMax
 keycap_mesh.translate(offset_x, offset_y, offset_z)
 
-keycap_shape = Part.Shape()
-keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
+base_keycap_shape = Part.Shape()
+base_keycap_shape.makeShapeFromMesh(keycap_mesh.Topology, 0.1)
 
-# Load and prepare base switch mesh
+print(f"Base keycap loaded: {bbox.XLength:.1f} x {bbox.YLength:.1f} x {bbox.ZLength:.1f} mm")
+
+# Load switch mesh
 switch_stl = os.path.join(script_dir, "kailhlowprofilev102_fixed.stl")
 print(f"Loading switch: {switch_stl}")
 
@@ -302,34 +361,24 @@ try:
     switch_mesh = Mesh.Mesh(switch_stl)
     switch_bbox = switch_mesh.BoundBox
 
-    print(f"Switch original bbox: X[{switch_bbox.XMin:.1f}, {switch_bbox.XMax:.1f}] Y[{switch_bbox.YMin:.1f}, {switch_bbox.YMax:.1f}] Z[{switch_bbox.ZMin:.1f}, {switch_bbox.ZMax:.1f}]")
-
-    # Center the switch mesh (top at Z=0)
     switch_offset_x = -(switch_bbox.XMin + switch_bbox.XMax) / 2
     switch_offset_y = -(switch_bbox.YMin + switch_bbox.YMax) / 2
     switch_offset_z = -switch_bbox.ZMax
 
-    print(f"Switch offset: ({switch_offset_x:.1f}, {switch_offset_y:.1f}, {switch_offset_z:.1f})")
-
     switch_mesh.translate(switch_offset_x, switch_offset_y, switch_offset_z)
 
-    # Convert using same method as keycap
     switch_shape = Part.Shape()
     switch_shape.makeShapeFromMesh(switch_mesh.Topology, 0.1)
 
-    print(f"Switch shape created successfully with {len(switch_shape.Faces)} faces")
-
+    print(f"Switch loaded successfully")
 except Exception as e:
     print(f"ERROR loading switch: {e}")
-    import traceback
-    traceback.print_exc()
-    # Create a simple parametric fallback
     switch_base = Part.makeBox(14, 14, 3.5, FreeCAD.Vector(-7, -7, -3.5))
     switch_top = Part.makeBox(12, 12, 1.5, FreeCAD.Vector(-6, -6, 0))
     switch_shape = switch_base.fuse(switch_top)
-    print("Using parametric fallback switch shape")
+    print("Using parametric fallback switch")
 
-# Load and prepare base switchplate mesh
+# Load switchplate mesh
 switchplate_stl = os.path.join(script_dir, "switchplate.stl")
 print(f"Loading switchplate: {switchplate_stl}")
 
@@ -337,66 +386,53 @@ try:
     switchplate_mesh = Mesh.Mesh(switchplate_stl)
     switchplate_bbox = switchplate_mesh.BoundBox
 
-    print(f"Switchplate original bbox: X[{switchplate_bbox.XMin:.1f}, {switchplate_bbox.XMax:.1f}] Y[{switchplate_bbox.YMin:.1f}, {switchplate_bbox.YMax:.1f}] Z[{switchplate_bbox.ZMin:.1f}, {switchplate_bbox.ZMax:.1f}]")
-
-    # Center the switchplate mesh horizontally, top at Z=0
     switchplate_offset_x = -(switchplate_bbox.XMin + switchplate_bbox.XMax) / 2
     switchplate_offset_y = -(switchplate_bbox.YMin + switchplate_bbox.YMax) / 2
     switchplate_offset_z = -switchplate_bbox.ZMax
 
-    print(f"Switchplate offset: ({switchplate_offset_x:.1f}, {switchplate_offset_y:.1f}, {switchplate_offset_z:.1f})")
-
     switchplate_mesh.translate(switchplate_offset_x, switchplate_offset_y, switchplate_offset_z)
 
-    # Convert using same method as keycap
     switchplate_shape = Part.Shape()
     switchplate_shape.makeShapeFromMesh(switchplate_mesh.Topology, 0.1)
 
-    print(f"Switchplate shape created successfully with {len(switchplate_shape.Faces)} faces")
-
+    print(f"Switchplate loaded successfully")
 except Exception as e:
     print(f"ERROR loading switchplate: {e}")
-    import traceback
-    traceback.print_exc()
     switchplate_shape = None
     print("Switchplate will not be included")
 
 # Calculate row positions along the spiral
-print(f"\n=== Calculating {row_count} row positions along spiral ===")
+print(f"\n=== Calculating {len(layout)} row positions along spiral ===")
 row_thetas = [spiral_start_angle]
-for row_idx in range(1, row_count):
+for row_idx in range(1, len(layout)):
     arc_dist = row_spacing * row_idx
     theta = find_theta_at_arc_distance(spiral_start_angle, arc_dist, hand_diameter)
     row_thetas.append(theta)
     print(f"Row {row_idx + 1}: theta={theta:.4f} rad ({math.degrees(theta):.1f}°), arc_dist={arc_dist}mm")
 
-# Create keycaps and switches for all rows
+# Create keycaps, switches, and switchplates for all rows
 total_keys = 0
-for row_idx in range(row_count):
+for row_idx, row_config in enumerate(layout):
     theta = row_thetas[row_idx]
-    print(f"\n=== Row {row_idx + 1}/{row_count} at theta={theta:.4f} rad ===")
+    keys = row_config.get('keys', [])
 
-    # Get spiral position at this angle
+    print(f"\n=== Row {row_idx + 1}/{len(layout)} with {len(keys)} keys ===")
+
+    # Calculate key positions for this row
+    key_positions, row_total_width = calculate_row_layout(keys, u)
+
+    # Get spiral position and orientation
     spiral_pos = spiral_position_at_angle(theta, hand_diameter)
-    normal = spiral_normal_at_angle(theta, hand_diameter)    # Normal to spiral (for offset direction)
+    normal = spiral_normal_at_angle(theta, hand_diameter)
 
-    # Use CONSISTENT orientation for all rows (not tangent-based)
-    # All rows should be parallel, oriented in the same direction
-    # Y-axis: Global Y direction (row runs left-to-right in global coords)
-    # Z-axis: Use spiral normal for perpendicular direction
-    # X-axis: Complete the right-hand coordinate system
-
-    y_axis = FreeCAD.Vector(0, 1, 0)  # Fixed global Y direction for all rows
-    z_axis = normal                    # Perpendicular to spiral (points outward)
+    # Create consistent orientation for all rows
+    y_axis = FreeCAD.Vector(0, 1, 0)
+    z_axis = normal
     x_axis = z_axis.cross(y_axis)
     x_axis.normalize()
-
-    # Re-orthogonalize to ensure perfect perpendicularity
     z_axis = x_axis.cross(y_axis)
     z_axis.normalize()
 
-    # Create rotation matrix from local axes
-    # All rows will have the same orientation, just different positions along the spiral
     local_to_global = FreeCAD.Rotation(
         FreeCAD.Matrix(
             x_axis.x, y_axis.x, z_axis.x, 0,
@@ -407,40 +443,44 @@ for row_idx in range(row_count):
     )
 
     print(f"  Spiral pos: ({spiral_pos.x:.1f}, {spiral_pos.y:.1f}, {spiral_pos.z:.1f})")
-    print(f"  Normal: ({normal.x:.3f}, {normal.y:.3f}, {normal.z:.3f})")
-    print(f"  Row orientation: Y-axis={y_axis}, Z-axis=({z_axis.x:.3f}, {z_axis.y:.3f}, {z_axis.z:.3f})")
 
-    # Create keys in this row
-    for key_idx in range(key_count):
-        # Calculate placement within the row's local coordinate system
-        local_placement, arc_angle = calculate_placement(key_idx, key_count, u, roll_radius, pitch_angle)
+    # Create each key in this row
+    for key_idx, (key, (key_offset_y, key_width_u)) in enumerate(zip(keys, key_positions)):
+        label = key.get('label', '')
 
-        # Transform local placement to global coordinates
-        # The local placement is in a coordinate system where:
-        # - Origin is at the row center
-        # - Y-axis is along the row
-        # - Z-axis is perpendicular to the row (away from center of curvature)
-        # We need to:
-        # 1. Apply the local rotation
-        # 2. Offset by the spiral position
-        # 3. Apply the spiral orientation
+        print(f"  Key {key_idx + 1}: '{label}' @ {key_offset_y:.1f}mm, {key_width_u}u")
 
-        # Combine rotations: first the local key rotation, then the spiral orientation
-        global_rotation = local_to_global.multiply(local_placement.Rotation)
+        # Calculate position along the curved row
+        keycap_angle = key_offset_y / roll_radius
+        keycap_angle_deg = math.degrees(keycap_angle)
 
-        # Transform local position to global
-        global_offset = local_to_global.multVec(local_placement.Base)
+        local_pos_x = 0
+        local_pos_y = roll_radius * math.sin(keycap_angle)
+        local_pos_z = roll_radius * (1 - math.cos(keycap_angle))
+
+        # Local rotations
+        roll_rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), keycap_angle_deg)
+        pitch_rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), pitch_angle)
+        local_rot = roll_rot.multiply(pitch_rot)
+
+        # Transform to global coordinates
+        global_rotation = local_to_global.multiply(local_rot)
+        local_vec = FreeCAD.Vector(local_pos_x, local_pos_y, local_pos_z)
+        global_offset = local_to_global.multVec(local_vec)
         global_position = spiral_pos.add(global_offset)
 
-        # Create final placement
+        # Create keycap with label
+        keycap_with_label = create_keycap_with_label(
+            base_keycap_shape, label, key_width_u, text_height, text_depth, u
+        )
+
         final_placement = FreeCAD.Placement(global_position, global_rotation)
 
-        # Create keycap
-        keycap_obj = doc.addObject("Part::Feature", f"Keycap_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
-        keycap_obj.Shape = keycap_shape
+        keycap_obj = doc.addObject("Part::Feature", f"Key_R{row_idx + 1:02d}_K{key_idx + 1:02d}_{label}")
+        keycap_obj.Shape = keycap_with_label
         keycap_obj.Placement = final_placement
 
-        # Create switch with offset
+        # Create switch
         local_switch_offset = FreeCAD.Vector(0, 0, -switch_offset)
         global_switch_offset = global_rotation.multVec(local_switch_offset)
         switch_position = global_position.add(global_switch_offset)
@@ -450,43 +490,34 @@ for row_idx in range(row_count):
         switch_obj.Shape = switch_shape
         switch_obj.Placement = switch_placement
 
-        # Create switchplate with offset (mountOffset mm below keycap top)
+        # Create switchplate
         if switchplate_shape is not None:
             local_switchplate_offset = FreeCAD.Vector(0, 0, -mount_offset)
             global_switchplate_offset = global_rotation.multVec(local_switchplate_offset)
             switchplate_position = global_position.add(global_switchplate_offset)
             switchplate_placement = FreeCAD.Placement(switchplate_position, global_rotation)
 
-            switchplate_obj = doc.addObject("Part::Feature", f"Switchplate_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
+            switchplate_obj = doc.addObject("Part::Feature", f"Plate_R{row_idx + 1:02d}_K{key_idx + 1:02d}")
             switchplate_obj.Shape = switchplate_shape
             switchplate_obj.Placement = switchplate_placement
 
         total_keys += 1
 
-    print(f"  Created {key_count} keys in row {row_idx + 1}")
+    print(f"  Created {len(keys)} keys in row {row_idx + 1}")
 
 # Create golden spiral
-# Parameters:
-# - Start diameter = handDiameter (from input.json)
-# - Arc length = 2π radians (one full revolution)
-# - Tube radius = 5mm
-# - Center at origin (0, 0, 0)
-# - Plane: X-Z (perpendicular to the Y-axis row direction)
 spiral_shape = create_golden_spiral(
     start_diameter=hand_diameter,
     arc_length_radians=2 * math.pi,
     tube_radius=5.0,
     center=FreeCAD.Vector(0, 0, 0),
     plane_normal='xz',
-    num_segments=200  # Higher resolution for smooth spiral
+    num_segments=200
 )
 
 spiral_obj = doc.addObject("Part::Feature", "GoldenSpiral")
 spiral_obj.Shape = spiral_shape
 
 doc.recompute()
-print(f"\nSUCCESS: Created {row_count} rows with {key_count} keys each ({total_keys} total keys)")
-if switchplate_shape is not None:
-    print(f"  {total_keys} keycaps + {total_keys} switches + {total_keys} switchplates + 1 golden spiral = {len(doc.Objects)} objects total")
-else:
-    print(f"  {total_keys} keycaps + {total_keys} switches + 1 golden spiral = {len(doc.Objects)} objects total")
+print(f"\nSUCCESS: Created {len(layout)} rows with {total_keys} total keys")
+print(f"  {total_keys} keycaps + {total_keys} switches + {total_keys} switchplates + 1 spiral = {len(doc.Objects)} objects")
