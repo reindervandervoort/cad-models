@@ -1,5 +1,5 @@
 {
-  "_comment": "Testing instancing fix - backend now uses 2 decimal precision",
+  "_comment": "Build retrigger - sanity check passed",
   "u": 18,
   "keyHeight": 6,
   "keyCount": 5,
