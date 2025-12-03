@@ -1,15 +1,84 @@
 {
-  "_comment": "Build retrigger - sanity check passed",
+  "_comment": "Left-hand split 60% keyboard with Y key",
   "u": 18,
   "keyHeight": 6,
-  "keyCount": 5,
   "switchOffset": 1,
   "mountOffset": 8.75,
   "pitch": 25,
   "handDiameter": 192,
   "rollDiameter": 192,
-  "rowCount": 6,
   "rowSpacing": 20,
   "spiralStartAngle": 1.5708,
-  "horizontalSpace": 2
+  "horizontalSpace": 2,
+  "textHeight": 3,
+  "textDepth": 0.5,
+  "layout": [
+    {
+      "row": 0,
+      "keys": [
+        {"label": "ESC", "width": 1.0},
+        {"label": "F1", "width": 1.0},
+        {"label": "F2", "width": 1.0},
+        {"label": "F3", "width": 1.0},
+        {"label": "F4", "width": 1.0},
+        {"label": "F5", "width": 1.0},
+        {"label": "F6", "width": 1.0}
+      ]
+    },
+    {
+      "row": 1,
+      "keys": [
+        {"label": "`", "width": 1.0},
+        {"label": "1", "width": 1.0},
+        {"label": "2", "width": 1.0},
+        {"label": "3", "width": 1.0},
+        {"label": "4", "width": 1.0},
+        {"label": "5", "width": 1.0},
+        {"label": "6", "width": 1.0}
+      ]
+    },
+    {
+      "row": 2,
+      "keys": [
+        {"label": "TAB", "width": 1.5},
+        {"label": "Q", "width": 1.0},
+        {"label": "W", "width": 1.0},
+        {"label": "E", "width": 1.0},
+        {"label": "R", "width": 1.0},
+        {"label": "T", "width": 1.0},
+        {"label": "Y", "width": 1.0}
+      ]
+    },
+    {
+      "row": 3,
+      "keys": [
+        {"label": "CAPS", "width": 1.75},
+        {"label": "A", "width": 1.0},
+        {"label": "S", "width": 1.0},
+        {"label": "D", "width": 1.0},
+        {"label": "F", "width": 1.0},
+        {"label": "G", "width": 1.0}
+      ]
+    },
+    {
+      "row": 4,
+      "keys": [
+        {"label": "SHIFT", "width": 2.25},
+        {"label": "Z", "width": 1.0},
+        {"label": "X", "width": 1.0},
+        {"label": "C", "width": 1.0},
+        {"label": "V", "width": 1.0},
+        {"label": "B", "width": 1.0}
+      ]
+    },
+    {
+      "row": 5,
+      "keys": [
+        {"label": "CTRL", "width": 1.25},
+        {"label": "FN", "width": 1.25},
+        {"label": "ALT", "width": 1.25},
+        {"label": "SPACE", "width": 2.75}
+      ]
+    }
+  ]
 }
