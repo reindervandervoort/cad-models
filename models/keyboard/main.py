@@ -41,10 +41,11 @@ spiral_start_angle = params.get('spiralStartAngle', math.pi)
 u = params.get('u', 18)
 pitch_angle = params.get('pitch', 45)
 switch_offset = params.get('switchOffset', 1)  # mm below keycap top
+mount_offset = params.get('mountOffset', 17.5)  # mm below keycap top for switchplate
 
 print(f"\nParameters: keyCount={key_count}, rowCount={row_count}, u={u}mm, pitch={pitch_angle}°")
 print(f"  hand_radius={hand_radius}mm, roll_radius={roll_radius}mm, switchOffset={switch_offset}mm")
-print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad")
+print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad, mountOffset={mount_offset}mm")
 
 # Helper function to calculate placement for any component
 def calculate_placement(position_index, key_count, u, hand_radius, pitch_angle):
@@ -449,9 +450,9 @@ for row_idx in range(row_count):
         switch_obj.Shape = switch_shape
         switch_obj.Placement = switch_placement
 
-        # Create switchplate with offset (17.5mm below keycap top)
+        # Create switchplate with offset (mountOffset mm below keycap top)
         if switchplate_shape is not None:
-            local_switchplate_offset = FreeCAD.Vector(0, 0, -17.5)
+            local_switchplate_offset = FreeCAD.Vector(0, 0, -mount_offset)
             global_switchplate_offset = global_rotation.multVec(local_switchplate_offset)
             switchplate_position = global_position.add(global_switchplate_offset)
             switchplate_placement = FreeCAD.Placement(switchplate_position, global_rotation)
