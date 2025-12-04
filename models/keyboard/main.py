@@ -41,6 +41,7 @@ u = params.get('u', 18)  # 1u key size in mm
 pitch_angle = params.get('pitch', 45)
 switch_offset = params.get('switchOffset', 1)
 mount_offset = params.get('mountOffset', 17.5)
+enable_labels = params.get('enableLabels', False)
 text_height = params.get('textHeight', 3)  # mm tall
 text_depth = params.get('textDepth', 0.5)  # mm emboss depth
 layout = params.get('layout', [])
@@ -96,18 +97,27 @@ def create_embossed_text(label, keycap_width_mm, text_height_mm, text_depth_mm):
         max_text_width = keycap_width_mm * 0.7
         if text_width > max_text_width:
             scale_factor = max_text_width / text_width
-            text_shape = text_shape.scale(scale_factor)
+            scale_matrix = FreeCAD.Matrix()
+            scale_matrix.scale(FreeCAD.Vector(scale_factor, scale_factor, scale_factor))
+            text_shape = text_shape.transformGeometry(scale_matrix)
             bbox = text_shape.BoundBox
             text_width = bbox.XMax - bbox.XMin
             text_actual_height = bbox.YMax - bbox.YMin
 
-        # Center the text
+        # Center the text using transform matrix
         offset_x = -text_width / 2
         offset_y = -text_actual_height / 2
-        text_shape.translate(FreeCAD.Vector(offset_x, offset_y, 0))
+        translate_matrix = FreeCAD.Matrix()
+        translate_matrix.move(FreeCAD.Vector(offset_x, offset_y, 0))
+        text_shape = text_shape.transformGeometry(translate_matrix)
 
         # Extrude the text to create 3D embossing
         text_3d = text_shape.extrude(FreeCAD.Vector(0, 0, text_depth_mm))
+
+        # Validate the extruded shape
+        if not text_3d or text_3d.isNull():
+            print(f"  WARNING: Extruded text shape for '{label}' is null")
+            return None
 
         return text_3d
 
@@ -143,15 +153,19 @@ def create_keycap_with_label(base_keycap_shape, label, key_width_u, text_height_
     # Create embossed text
     if label:
         text_shape = create_embossed_text(label, key_width_u * u_mm, text_height_mm, text_depth_mm)
-        if text_shape:
+        if text_shape and not text_shape.isNull():
             # Position text on top of keycap (slightly below surface for embossing)
-            text_shape.translate(FreeCAD.Vector(0, 0, -text_depth_mm * 0.5))
+            position_matrix = FreeCAD.Matrix()
+            position_matrix.move(FreeCAD.Vector(0, 0, -text_depth_mm * 0.5))
+            text_shape = text_shape.transformGeometry(position_matrix)
 
-            # Fuse text with keycap
-            try:
-                keycap = keycap.fuse(text_shape)
-            except Exception as e:
-                print(f"  WARNING: Could not fuse text '{label}': {e}")
+            # Validate shape again after translation
+            if not text_shape.isNull():
+                # Fuse text with keycap
+                try:
+                    keycap = keycap.fuse(text_shape)
+                except Exception as e:
+                    print(f"  WARNING: Could not fuse text '{label}': {e}")
 
     return keycap
 
@@ -469,9 +483,10 @@ for row_idx, row_config in enumerate(layout):
         global_offset = local_to_global.multVec(local_vec)
         global_position = spiral_pos.add(global_offset)
 
-        # Create keycap with label
+        # Create keycap with label (only if labels enabled)
+        keycap_label = label if enable_labels else None
         keycap_with_label = create_keycap_with_label(
-            base_keycap_shape, label, key_width_u, text_height, text_depth, u
+            base_keycap_shape, keycap_label, key_width_u, text_height, text_depth, u
         )
 
         final_placement = FreeCAD.Placement(global_position, global_rotation)
