@@ -20,10 +20,13 @@ PHI = (1 + math.sqrt(5)) / 2  # Approximately 1.618...
 print("=== Left-hand split keyboard with embossed labels ===")
 
 # Document setup
-if 'doc' not in dir():
-    doc = FreeCAD.newDocument("Keyboard")
-else:
+try:
+    # Check if doc is already provided (backend mode)
+    doc
     print("Using backend mode")
+except NameError:
+    # Running in FreeCAD GUI or console mode
+    doc = FreeCAD.newDocument("Keyboard")
 
 # Load parameters
 script_dir = os.path.dirname(os.path.abspath(__file__))
