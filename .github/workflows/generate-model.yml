@@ -83,25 +83,51 @@ jobs:
 
       - name: Ensure Fargate task is running
         run: |
-          # Check if any tasks are running in the cluster
+          # Get the latest ACTIVE task definition revision
+          LATEST_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "${{ secrets.ECS_TASK_DEFINITION }}" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Latest task definition: $LATEST_TASK_DEF"
+
+          # Check if any tasks are running with the latest revision
           RUNNING_TASKS=$(aws ecs list-tasks \
             --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
             --desired-status RUNNING \
             --query 'taskArns' \
             --output text)
 
-          if [ -z "$RUNNING_TASKS" ] || [ "$RUNNING_TASKS" == "None" ]; then
-            echo "No running tasks found, starting new task..."
+          USING_LATEST=false
+          if [ -n "$RUNNING_TASKS" ] && [ "$RUNNING_TASKS" != "None" ]; then
+            # Check if any running task is using the latest revision
+            for TASK_ARN in $RUNNING_TASKS; do
+              TASK_DEF=$(aws ecs describe-tasks \
+                --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
+                --tasks "$TASK_ARN" \
+                --query 'tasks[0].taskDefinitionArn' \
+                --output text)
+
+              if [ "$TASK_DEF" == "$LATEST_TASK_DEF" ]; then
+                echo "✓ Task already running with latest revision: $TASK_ARN"
+                USING_LATEST=true
+                break
+              else
+                echo "⚠ Found task $TASK_ARN using old revision: $TASK_DEF"
+              fi
+            done
+          fi
+
+          if [ "$USING_LATEST" == "false" ]; then
+            echo "Starting new task with latest revision..."
             TASK_ARN=$(aws ecs run-task \
               --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
-              --task-definition "${{ secrets.ECS_TASK_DEFINITION }}" \
+              --task-definition "$LATEST_TASK_DEF" \
               --launch-type FARGATE \
               --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
               --query 'tasks[0].taskArn' \
               --output text)
-            echo "✓ Started task: $TASK_ARN"
-          else
-            echo "✓ Task already running: $RUNNING_TASKS"
+            echo "✓ Started new task with latest revision: $TASK_ARN"
           fi
 
       - name: Wait for model generation
