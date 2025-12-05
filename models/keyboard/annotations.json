@@ -1,0 +1,28 @@
+{
+  "textLabels": [
+    {
+      "text": "ESC",
+      "position": [0, 0, 10],
+      "fontSize": 3,
+      "color": "#FFFFFF",
+      "renderMode": "sprite",
+      "rotation": [0, 0, 0]
+    },
+    {
+      "text": "F1",
+      "position": [25, 0, 10],
+      "fontSize": 3,
+      "color": "#FFFFFF",
+      "renderMode": "sprite",
+      "rotation": [0, 0, 0]
+    },
+    {
+      "text": "TEST",
+      "position": [50, 0, 10],
+      "fontSize": 3,
+      "color": "#FFFFFF",
+      "renderMode": "sprite",
+      "rotation": [0, 0, 0]
+    }
+  ]
+}
