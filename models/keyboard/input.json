@@ -10,7 +10,7 @@
   "rowSpacing": 20,
   "spiralStartAngle": 1.5708,
   "horizontalSpace": 2,
-  "enableLabels": false,
+  "enableLabels": true,
   "textHeight": 3,
   "textDepth": 0.5,
   "layout": [
