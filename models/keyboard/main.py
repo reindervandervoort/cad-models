@@ -49,6 +49,9 @@ text_height = params.get('textHeight', 3)  # mm tall
 text_depth = params.get('textDepth', 0.5)  # mm emboss depth
 layout = params.get('layout', [])
 
+# Collect text labels for annotations (rendered by frontend)
+text_labels = []
+
 print(f"\nParameters: u={u}mm, pitch={pitch_angle}°, rows={len(layout)}")
 print(f"  hand_radius={hand_radius}mm, roll_radius={roll_radius}mm")
 print(f"  rowSpacing={row_spacing}mm, spiralStartAngle={spiral_start_angle:.3f} rad")
@@ -60,6 +63,9 @@ def create_embossed_text(label, keycap_width_mm, text_height_mm, text_depth_mm):
     """
     Create embossed text for a keycap.
 
+    NOTE: 3D text geometry is not supported in FreeCAD 0.19.
+    Text labels are collected and rendered as annotations in the frontend viewer instead.
+
     Args:
         label: Text to emboss
         keycap_width_mm: Width of keycap in mm
@@ -67,8 +73,13 @@ def create_embossed_text(label, keycap_width_mm, text_height_mm, text_depth_mm):
         text_depth_mm: Depth of embossing in mm
 
     Returns:
-        Part.Shape of the embossed text, or None if failed
+        None (text is rendered as annotation, not 3D geometry)
     """
+    # Text labels are collected globally and saved to annotations.json
+    # The frontend viewer will render them as overlays on the 3D model
+    return None
+
+    # Original 3D text code disabled (Draft.makeShapeString not available in FreeCAD 0.19):
     try:
         # Create text shape using Draft module
         font_file = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
@@ -77,12 +88,7 @@ def create_embossed_text(label, keycap_width_mm, text_height_mm, text_depth_mm):
             font_file = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
         # Create the text string shape
-        text_obj = Draft.makeShapeString(
-            String=label,
-            FontFile=font_file,
-            Size=text_height_mm,
-            Tracking=0
-        )
+        text_obj = None  # Draft.makeShapeString not available
 
         if not text_obj or not hasattr(text_obj, 'Shape'):
             print(f"  WARNING: Could not create text shape for '{label}'")
@@ -498,6 +504,30 @@ for row_idx, row_config in enumerate(layout):
         keycap_obj.Shape = keycap_with_label
         keycap_obj.Placement = final_placement
 
+        # Collect text label for annotations (if enabled)
+        if enable_labels and label:
+            # Position text slightly above the keycap surface
+            label_offset = FreeCAD.Vector(0, 0, 1.0)  # 1mm above keycap
+            global_label_offset = global_rotation.multVec(label_offset)
+            label_position = global_position.add(global_label_offset)
+
+            # Convert rotation to Euler angles (radians) for three.js
+            euler_angles = global_rotation.toEuler()  # Returns (yaw, pitch, roll) in degrees
+            rotation_radians = [
+                math.radians(euler_angles[1]),  # pitch (X)
+                math.radians(euler_angles[2]),  # roll (Y)
+                math.radians(euler_angles[0])   # yaw (Z)
+            ]
+
+            text_labels.append({
+                "text": label,
+                "position": [label_position.x, label_position.y, label_position.z],
+                "fontSize": text_height,
+                "color": "#FFFFFF",
+                "renderMode": "sprite",
+                "rotation": rotation_radians
+            })
+
         # Create switch
         local_switch_offset = FreeCAD.Vector(0, 0, -switch_offset)
         global_switch_offset = global_rotation.multVec(local_switch_offset)
@@ -539,3 +569,13 @@ spiral_obj.Shape = spiral_shape
 doc.recompute()
 print(f"\nSUCCESS: Created {len(layout)} rows with {total_keys} total keys")
 print(f"  {total_keys} keycaps + {total_keys} switches + {total_keys} switchplates + 1 spiral = {len(doc.Objects)} objects")
+
+# Save text labels as annotations for frontend rendering
+if enable_labels and text_labels:
+    annotations_file = os.path.join(script_dir, "annotations.json")
+    annotations_data = {
+        "textLabels": text_labels
+    }
+    with open(annotations_file, 'w') as f:
+        json.dump(annotations_data, f, indent=2)
+    print(f"  Saved {len(text_labels)} text labels to annotations.json")
